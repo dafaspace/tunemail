@@ -1574,6 +1574,8 @@ button {
       </div>
       <div class="auth-footer">
         No account? <a id="link-to-signup">Create one</a>
+        <span aria-hidden="true"> &middot; </span>
+        <a id="link-browse-guest">Just browse</a>
       </div>
     </div>
   </div>
@@ -2257,7 +2259,46 @@ function showScreen(name) {
 }
 
 // ── Tab management ────────────────────────────────────────────────────
+
+let isGuest = false;
+
+function enterGuestMode() {
+  isGuest = true;
+  currentUser = null;
+  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+  document.getElementById('main-app').classList.add('active');
+  // Discover is the guest's home: it is the tab that works in full.
+  showTab('shared');
+  // The account button becomes the way back to sign-in.
+  const av = document.querySelector('.avatar-btn');
+  if (av) av.textContent = '→';
+}
+
+// One gate for every action that needs somebody to exist. The prompt lands at
+// the moment of intent, which is the only moment it converts.
+function requireAccount(what) {
+  if (currentUser) return true;
+  showToast(`Create an account to ${what || 'do that'}`);
+  isGuest = false;
+  document.getElementById('main-app').classList.remove('active');
+  showScreen('signup');
+  return false;
+}
+
 function showTab(name) {
+  if (name === 'playlists' && !currentUser) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+    const c = document.getElementById('playlists-list');
+    if (c) c.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-title">Your playlists live here</div>
+        <p>Create an account to save tracks and share them as one link.</p>
+        <button class="btn btn-primary" style="max-width:240px;margin:14px auto 0"
+                onclick="requireAccount('save playlists')">Get started</button>
+      </div>`;
+    return;
+  }
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   if (name === 'shared') loadDiscover();
@@ -2507,13 +2548,23 @@ async function loadDiscover() {
 }
 
 // ── Account modal ─────────────────────────────────────────────────────
-document.getElementById('btn-avatar').addEventListener('click', () => openModal('overlay-account'));
+
+const _guestLink = document.getElementById('link-browse-guest');
+if (_guestLink) _guestLink.addEventListener('click', enterGuestMode);
+
+document.getElementById('btn-avatar').addEventListener('click', () => {
+  if (!currentUser) { isGuest = false; document.getElementById('main-app').classList.remove('active'); showScreen('signin'); return; }
+  openModal('overlay-account');
+});
 
 // ── Feedback ──────────────────────────────────────────────────────────
 const MUSIC_NIGHT_WORKER = 'https://music-night-worker.dafa4me.workers.dev';
 let _fbType = 'other';
 
-document.getElementById('btn-open-feedback').addEventListener('click', openFeedback);
+document.getElementById('btn-open-feedback').addEventListener('click', () => {
+  if (!requireAccount('send feedback')) return;
+  openFeedback();
+});
 
 function openFeedback() {
   _fbType = 'other';
@@ -2673,6 +2724,7 @@ function showConfirm(title, text, cb) {
 
 // ── New playlist button ───────────────────────────────────────────────
 document.getElementById('btn-new-playlist').addEventListener('click', () => {
+  if (!requireAccount('create a playlist')) return;
   document.getElementById('modal-playlist-title').textContent = 'New Playlist';
   document.getElementById('edit-danger').style.display = 'none';
   document.getElementById('playlist-name-input').value = '';
@@ -3046,6 +3098,7 @@ document.getElementById('btn-expand-platforms').addEventListener('click', () => 
 
 // ── Search: share single track link ──────────────────────────────────
 document.getElementById('btn-share-track').addEventListener('click', async () => {
+  if (!requireAccount('share a track')) return;
   const artist = document.getElementById('search-artist').value.trim();
   const track  = document.getElementById('search-track').value.trim();
   const genre  = getGenreValue();
@@ -3077,6 +3130,7 @@ document.getElementById('btn-share-track').addEventListener('click', async () =>
 
 // ── Tracks: add to playlist ───────────────────────────────────────────
 document.getElementById('btn-add-track').addEventListener('click', async () => {
+  if (!requireAccount('add a track')) return;
   const artist    = document.getElementById('search-artist').value.trim();
   const track     = document.getElementById('search-track').value.trim();
   const genre     = getGenreValue();
@@ -4063,6 +4117,7 @@ document.getElementById('search-playlist-select').addEventListener('change', fun
 // After creation, auto-selects the new playlist in the select
 let searchTabNewPlaylist = false;
 document.getElementById('btn-new-playlist-inline').addEventListener('click', () => {
+  if (!requireAccount('create a playlist')) return;
   searchTabNewPlaylist = true;
   document.getElementById('modal-playlist-title').textContent = 'New Playlist';
   document.getElementById('edit-danger').style.display = 'none';
