@@ -375,7 +375,7 @@ export default {
         return json({ error: "Bad request" }, 400, cors());
       }
 
-      const { feedback_id, type, message, user_name, app } = body;
+      const { feedback_id, type, message, user_name, app, screenshot_url } = body;
       if (app !== "music-night") return json({ error: "Bad request" }, 400, cors());
       if (!/^[a-f0-9-]{36}$/.test(String(feedback_id || ""))) {
         return json({ error: "Bad request" }, 400, cors());
@@ -384,9 +384,19 @@ export default {
       const typeEmoji = { bug: "🔧", idea: "💡", other: "💬" }[type] || "💬";
       // The id goes FIRST: the regex on the way back takes the first match, and
       // everything below this line is text the user controls.
+      // Only a URL on our own storage host is ever echoed into the chat: the
+      // field arrives from the client, and an arbitrary link pasted into the
+      // owner's Telegram would be a small phishing channel.
+      const shot = /^https:\/\/rqruaqoecvpythbvnozf\.supabase\.co\/storage\/v1\/object\/public\//
+        .test(String(screenshot_url || "")) ? screenshot_url : null;
+
       const text =
         `\`id:${feedback_id}\`\n${typeEmoji} *Tunemail Feedback*\n\n` +
-        `👤 ${escapeMarkdown(user_name)}\n📝 ${escapeMarkdown(message)}`;
+        `👤 ${escapeMarkdown(user_name)}\n📝 ${escapeMarkdown(message)}` +
+        // Inside a MarkdownV2 link target only ")" and "\\" need escaping. Running
+        // the URL through escapeMarkdown instead would litter it with backslashes
+        // and Telegram would refuse the whole message.
+        (shot ? `\n\n[\u{1F4CE} Screenshot](${shot.replace(/[)\\]/g, "\\$&")})` : "");
 
       try {
         const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {

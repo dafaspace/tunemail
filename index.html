@@ -748,6 +748,36 @@ button {
       border-color: rgba(248,113,113,0.6);
     }
 
+    .fb-del {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0;
+      background: none; border: none; color: #666; cursor: pointer;
+      font-size: 20px; line-height: 1; padding: 0;
+    }
+    .fb-del:hover { color: #f87171; }
+    .fb-shot-link { display: block; margin-top: 8px; }
+    .fb-shot-link img {
+      max-width: 100%; max-height: 140px; border-radius: 6px;
+      border: 1px solid var(--border); display: block;
+    }
+
+    .fb-attach { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; }
+    .fb-attach-btn, .fb-attach-preview button {
+      display: inline-flex; align-items: center; gap: 7px;
+      min-height: 44px; padding: 0 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--muted-strong); cursor: pointer;
+      font-family: var(--font-text); font-size: 12.5px;
+    }
+    .fb-attach-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+    .fb-attach-preview { display: inline-flex; align-items: center; gap: 8px; }
+    .fb-attach-preview img {
+      width: 40px; height: 40px; border-radius: 6px; object-fit: cover;
+      border: 1px solid var(--border);
+    }
+    .fb-attach-preview button { color: #f87171; border-color: rgba(248,113,113,0.3); }
+
     .platform-expand {
       display: inline-flex; align-items: center; justify-content: center;
       min-height: 34px; padding: 0 12px;
@@ -2214,6 +2244,23 @@ button {
       </div>
       <div class="feedback-modal-label">Message</div>
       <textarea id="fb-message" class="feedback-textarea" placeholder="Tell me what's on your mind…"></textarea>
+
+      <!-- A screenshot turns "something is broken" into a report that can be
+           acted on. Ported from Cinemail, where it earns its place. -->
+      <input type="file" id="fb-screenshot" accept="image/*" hidden>
+      <div class="fb-attach">
+        <button type="button" class="fb-attach-btn" id="fb-attach-btn">
+          <svg class="g" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21.4 11.05 12.25 20.2a6 6 0 0 1-8.49-8.49l9.2-9.19a4 4 0 0 1 5.65 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+          <span id="fb-attach-lbl">Attach a screenshot</span>
+        </button>
+        <span class="fb-attach-preview" id="fb-attach-preview" hidden>
+          <img id="fb-attach-thumb" alt="">
+          <button type="button" id="fb-attach-clear" aria-label="Remove the screenshot">Remove</button>
+        </span>
+      </div>
       <div id="fb-replies" style="display:none;margin-bottom:14px"></div>
       <div style="display:flex;gap:9px">
         <button class="fb-btn-cancel" onclick="closeFeedback()">Cancel</button>
@@ -2616,6 +2663,15 @@ function startFeedbackRealtime() {
     .subscribe();
 }
 
+// The realtime socket drops on sleep, on a network change, and on any of the
+// hundred things that end a WebSocket without telling anyone. A reply that
+// arrived while it was down would never light the badge. Re-checking whenever
+// the app comes back into view costs one small query and covers the case that
+// actually happens: the phone was in a pocket.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentUser) checkFeedbackBadge();
+});
+
 async function checkFeedbackBadge() {
   if (!currentUser) return;
   try {
@@ -2626,11 +2682,73 @@ async function checkFeedbackBadge() {
   } catch (_) {}
 }
 
+document.getElementById('fb-replies').addEventListener('click', e => {
+  const btn = e.target.closest('[data-fb-del]');
+  if (!btn) return;
+  showConfirm('Delete this message?', 'It disappears for you and for Daniel.',
+    () => deleteFeedback(btn.dataset.fbDel));
+});
+
 async function deleteFeedback(id) {
   try {
-    await sbClient.from('feedback').delete().eq('id', id);
+    // The user_id filter is what RLS enforces anyway; stating it here means a
+    // policy change can never silently widen what this call reaches.
+    await sbClient.from('feedback').delete().eq('id', id).eq('user_id', currentUser.id);
     loadFeedbackReplies();
   } catch (e) { showToast('Could not delete: ' + e.message); }
+}
+
+// ── Feedback: screenshot ─────────────────────────────────────────────
+let _fbShot = null;
+
+const _fbInput = document.getElementById('fb-screenshot');
+const _fbBtn = document.getElementById('fb-attach-btn');
+const _fbClear = document.getElementById('fb-attach-clear');
+
+if (_fbBtn) _fbBtn.addEventListener('click', () => _fbInput.click());
+if (_fbClear) _fbClear.addEventListener('click', clearFbShot);
+
+if (_fbInput) _fbInput.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  // Rejected here rather than after a long upload that fails at the far end.
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('That image is over 5 MB');
+    e.target.value = '';
+    return;
+  }
+  _fbShot = file;
+  const thumb = document.getElementById('fb-attach-thumb');
+  if (thumb.dataset.url) URL.revokeObjectURL(thumb.dataset.url);
+  const url = URL.createObjectURL(file);
+  thumb.src = url;
+  thumb.dataset.url = url;
+  document.getElementById('fb-attach-preview').hidden = false;
+  document.getElementById('fb-attach-lbl').textContent = 'Change';
+});
+
+function clearFbShot() {
+  _fbShot = null;
+  if (_fbInput) _fbInput.value = '';
+  const thumb = document.getElementById('fb-attach-thumb');
+  if (thumb?.dataset.url) { URL.revokeObjectURL(thumb.dataset.url); delete thumb.dataset.url; }
+  const prev = document.getElementById('fb-attach-preview');
+  if (prev) prev.hidden = true;
+  const lbl = document.getElementById('fb-attach-lbl');
+  if (lbl) lbl.textContent = 'Attach a screenshot';
+}
+
+async function uploadFbShot(file) {
+  if (!file || !currentUser) return null;
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+  // Path starts with the user id: the storage policy uses it to keep one
+  // person's uploads out of another's folder.
+  const path = `${currentUser.id}/${Date.now()}.${ext}`;
+  const { error } = await sbClient.storage.from('feedback-screenshots')
+    .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = sbClient.storage.from('feedback-screenshots').getPublicUrl(path);
+  return data?.publicUrl || null;
 }
 
 async function submitFeedback() {
@@ -2640,6 +2758,13 @@ async function submitFeedback() {
   btn.textContent = 'SENDING…'; btn.disabled = true;
   try {
     const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '';
+    let shotUrl = null;
+    if (_fbShot) {
+      // A failed upload must not swallow the message itself - the words are the
+      // part that matters.
+      try { shotUrl = await uploadFbShot(_fbShot); }
+      catch (e) { showToast('Screenshot could not be attached, sending the text'); }
+    }
     const { data, error } = await sbClient.from('feedback').insert({
       user_id:     currentUser.id,
       user_email:  currentUser.email || '',
@@ -2648,7 +2773,8 @@ async function submitFeedback() {
       message,
       app_version: '1.0.0',
       user_agent:  navigator.userAgent,
-      app:         'music-night'
+      app:         'music-night',
+      screenshot_url: shotUrl,
     }).select();
     if (error) throw new Error(error.message);
     const inserted = data?.[0];
@@ -2665,11 +2791,13 @@ async function submitFeedback() {
           type:        _fbType,
           message,
           user_name:   displayName || currentUser.email?.split('@')[0] || 'someone',
+          screenshot_url: shotUrl,
           app:         'music-night'
         })
       }).catch(() => {});
     }
     document.getElementById('fb-message').value = '';
+    clearFbShot();
     showToast('Got it! I read everything personally');
     closeFeedback();
   } catch (e) {
@@ -2683,7 +2811,7 @@ async function loadFeedbackReplies() {
   if (!el || !currentUser) return;
   try {
     const { data, error } = await sbClient.from('feedback')
-      .select('id, type, message, reply, replied_at, read_by_user, created_at')
+      .select('id, type, message, reply, replied_at, read_by_user, created_at, screenshot_url')
       .eq('user_id', currentUser.id)
       .order('created_at', { ascending: false })
       .limit(10);
@@ -2700,13 +2828,17 @@ async function loadFeedbackReplies() {
       ${data.map(f => `
         <div style="margin-bottom:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:11px;color:#555">${typeEmoji[f.type] || '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'} ${new Date(f.created_at).toLocaleDateString('en-GB')}</div>
-            <button onclick="deleteFeedback('${f.id}')" style="background:none;border:none;color:#444;cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>
+            <div style="font-size:11px;color:#555">${typeEmoji[f.type] || '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'} ${(parseStamp(f.created_at) || new Date()).toLocaleDateString('en-GB')}</div>
+            <button class="fb-del" data-fb-del="${escHtml(f.id)}" aria-label="Delete this message">×</button>
           </div>
           <div style="font-size:13px;color:#ccc">${escHtml(f.message)}</div>
+          ${f.screenshot_url ? `
+            <a href="${safeUrl(f.screenshot_url)}" target="_blank" rel="noopener noreferrer" class="fb-shot-link">
+              <img src="${safeUrl(f.screenshot_url)}" alt="Screenshot you attached" loading="lazy">
+            </a>` : ''}
           ${f.reply ? `
             <div class="fb-reply-card">
-              <div class="fb-reply-label">↩ Reply from Daniel</div>
+              <div class="fb-reply-label">↩ Reply from Daniel${f.replied_at ? ` · ${(parseStamp(f.replied_at) || new Date()).toLocaleDateString('en-GB')}` : ''}</div>
               <div class="fb-reply-text">${escHtml(f.reply)}</div>
             </div>` : ''}
         </div>`).join('')}`;
