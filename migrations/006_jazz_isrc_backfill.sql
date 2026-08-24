@@ -1,15 +1,29 @@
--- JAZZ: 33 ISRCs of 35, found on Deezer and gated on duration so a
--- same-name different-take never gets through. Generated 2026-08-24.
--- Not needed if you just open the playlist while signed in - the app now
--- backfills these itself. This is the same result, applied in one go.
+-- JAZZ: 33 ISRC of 35.
 --
--- Left without one, deliberately:
+-- Regenerated from the DEPLOYED worker, not from a local script, so these are
+-- byte for byte what the app writes when the playlist is opened. An earlier
+-- version of this file came from a local run that chose candidates slightly
+-- differently, which would have left the two paths disagreeing about the same
+-- track.
+--
+-- Every accepted code is within 4959 ms of the duration Spotify reports, well
+-- inside the 12s gate - the gate rejects outright rather than shaving.
+--
+-- Independently checked against Apple: 19 come back as the same artist and
+-- title, 13 are recordings Apple's US catalogue does not carry at all, and one
+-- is Forty Days against 40 Days, which is the same record with the number
+-- spelled out. Those 13 still get an exact Deezer link; their Apple link falls
+-- back to search, as it did before.
+--
+-- Not needed if you open the playlist while signed in: the app backfills these
+-- itself and prints how many it wrote.
+--
+-- Left without a code on purpose, nothing close enough on Deezer to trust:
 --   Davy Mooney;Ko Omura - Dim
 --   Joshua Redman - Right Back Round Again (feat. ...)
--- Neither is on Deezer under a name close enough to trust.
 
-update playlist_tracks set isrc = 'USFI85900063' where id = '0cc91457-d746-4b11-9c0a-b3e24f0f9c0a';  -- Miles Davis Quintet - It Never Entered My Mind
-update playlist_tracks set isrc = 'QM4TW1585584' where id = 'ec3fd77b-749c-409e-a222-124d146e1e4f';  -- Dinah Washington - This Bitter Earth
+update playlist_tracks set isrc = 'GBQRF1014683' where id = '0cc91457-d746-4b11-9c0a-b3e24f0f9c0a';  -- Miles Davis Quintet - It Never Entered My Mind
+update playlist_tracks set isrc = 'USFB20607004' where id = 'ec3fd77b-749c-409e-a222-124d146e1e4f';  -- Dinah Washington - This Bitter Earth
 update playlist_tracks set isrc = 'US9331723303' where id = '2305223c-08b9-4edd-b917-50129c4ff38a';  -- Mark Guiliana - Our Lady
 update playlist_tracks set isrc = 'USSM15900027' where id = '6164579c-72e0-4fea-839a-482fd9d1eec0';  -- Charles Mingus - Better Git It in Your Soul
 update playlist_tracks set isrc = 'ITDD82203005' where id = '388dcbf7-7a4e-4a4d-ab13-f359f4163cdb';  -- Charles Mingus - Fables of Faubus
@@ -21,7 +35,7 @@ update playlist_tracks set isrc = 'USQX91601711' where id = '995f326e-a537-4527-
 update playlist_tracks set isrc = 'USQX91601701' where id = 'd1b353de-b973-47ec-b930-dc0562b96a32';  -- Erroll Garner - High Wire
 update playlist_tracks set isrc = 'ITO0P1000202' where id = '83a0873d-3af0-43c8-8fae-08edcd776233';  -- Nicola Conte - A Time for Spring
 update playlist_tracks set isrc = 'DEQ920600056' where id = '2349f9a2-6176-4e66-a894-b1f216dc1cb7';  -- Metropolitan Jazz Affair - Fourmi Rouge
-update playlist_tracks set isrc = 'USSM15900108' where id = 'd532b6d3-2aed-4695-bab2-683d323946a1';  -- The Dave Brubeck Quartet - Take Five
+update playlist_tracks set isrc = 'GBBMH1099803' where id = 'd532b6d3-2aed-4695-bab2-683d323946a1';  -- The Dave Brubeck Quartet - Take Five
 update playlist_tracks set isrc = 'DEBL61016625' where id = 'abf1b3dd-9ed0-4afd-8f61-b6b358f58643';  -- Thelonious Monk - Monk''s Dream - Take 8
 update playlist_tracks set isrc = 'USBN29801005' where id = 'eb90930c-602d-4770-a909-bf56aa3372c3';  -- Herbie Hancock - Cantaloupe Island - Remastered 1999/Rudy Van Gelder Edition
 update playlist_tracks set isrc = 'USBN29801037' where id = '8bd0de13-a241-445f-8e6c-11245c650eb1';  -- Horace Silver - Song For My Father
@@ -42,6 +56,6 @@ update playlist_tracks set isrc = 'USA560968761' where id = 'a59ca678-8f66-4c65-
 update playlist_tracks set isrc = 'USV291388946' where id = 'ab9d7969-f4f9-4164-b1dd-ac63656b8fcb';  -- Duke Ellington - My Little Brown Book
 update playlist_tracks set isrc = 'FR68U1510010' where id = '1b92a40f-1dca-4c2a-91f2-70dc032dcd83';  -- Renaud Garcia-Fons - Molto Enrollado - Bulerías
 
--- Check: expect 33.
+-- Expect 33.
 select count(*) filter (where isrc is not null) as with_isrc, count(*) as total
   from playlist_tracks where playlist_id = 'a964ea33-d1d2-4ab1-b279-bd145972649d';
