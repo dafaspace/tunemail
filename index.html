@@ -3121,11 +3121,81 @@ async function resolveAppleByIsrc(isrc) {
   return out;
 }
 
+// Finds the ISRC for a recording that arrived without one.
+//
+// Anything imported from Spotify before the import started reading
+// external_ids.isrc has none, and a CSV or a hand-added track never had one.
+// Without it there is no exact link, only a search URL - JAZZ measured 0 of 35.
+//
+// Deezer is the source because it publishes the ISRC on a plain unauthenticated
+// endpoint. The hard part is not finding a track with the right name, it is
+// refusing the wrong recording: jazz standards exist in dozens of takes, and a
+// confidently wrong ISRC is worse than none because it produces a link that
+// looks exact and goes somewhere else. Duration is what separates them.
+// Measured on JAZZ: name matching alone accepted 5 wrong recordings, including
+// a My Favorite Things 15 minutes from the one in the playlist. The 12s gate
+// rejected all 5 and kept 33 of 35.
+const isrcLookupCache = new Map();
+
+async function discoverIsrc(artist, title, durationMs) {
+  const cacheKey = `${artist}|${title}`;
+  if (isrcLookupCache.has(cacheKey)) return isrcLookupCache.get(cacheKey);
+
+  // A trailing "- Take 8" or "- Remastered" qualifies the same tune; Deezer
+  // usually files it under the bare title.
+  const bare = s => String(s || '').split(/\s+-\s+/)[0].trim();
+  // Artists arrive semicolon-separated from Spotify and comma-separated from
+  // CSV. The first one is the one Deezer files the track under.
+  const lead = String(artist || '').split(/[;,]/)[0].trim();
+  const short = bare(title);
+
+  const norm = s => String(s || '').toLowerCase().normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '').replace(/[’'`´]/g, "'")
+    .replace(/\s*[\(\[].*?[\)\]]\s*/g, ' ')
+    .replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  let best = null, bestDrift = Infinity;
+  try {
+    for (const q of [`artist:"${lead}" track:"${short}"`, `${lead} ${short}`]) {
+      const r = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=25`);
+      if (!r.ok) continue;
+      const j = await r.json();
+      for (const c of (j?.data || [])) {
+        const ct = norm(c.title), want = norm(short);
+        if (ct !== want && !ct.startsWith(want)) continue;
+        const ca = norm(c.artist?.name), wa = norm(lead);
+        if (!ca.includes(wa) && !wa.includes(ca)) continue;
+        // No duration to compare against means no way to tell the takes apart,
+        // so the first name match is taken but only when nothing better exists.
+        const drift = durationMs ? Math.abs(durationMs - c.duration * 1000) : 0;
+        if (drift < bestDrift) { bestDrift = drift; best = c; }
+      }
+      if (best && bestDrift <= 4000) break;
+    }
+    if (!best || bestDrift > 12000) { isrcLookupCache.set(cacheKey, null); return null; }
+
+    const full = await fetch(`https://api.deezer.com/track/${best.id}`).then(x => x.ok ? x.json() : null);
+    const found = full?.isrc || null;
+    isrcLookupCache.set(cacheKey, found);
+    return found;
+  } catch (e) {
+    console.warn('isrc discover:', e.message);
+    isrcLookupCache.set(cacheKey, null);
+    return null;
+  }
+}
+
 async function enrichTrack(t) {
   const key = `${t.isrc || ''}|${t.artist}|${t.track_name}`;
   if (enrichCache.has(key)) return enrichCache.get(key);
   let out = null;
   try {
+    if (!t.isrc) {
+      const found = await discoverIsrc(t.artist, t.track_name, t.duration_ms);
+      // Marked so the caller can write it back once rather than rediscovering
+      // it on every visit.
+      if (found) { t.isrc = found; t._isrcDiscovered = true; }
+    }
     if (t.isrc) {
       // Apple first: exact, and it carries artwork, preview and a real track URL
       // in one answer.
@@ -5764,7 +5834,26 @@ async function enrichTrackList(container, trackList) {
         enrich_missed_at: new Date().toISOString(),
       });
     }
+    persistDiscoveredIsrcs(trackList);
   }
+}
+
+// An ISRC found by discoverIsrc belongs on the row, not in a variable that dies
+// with the page. Only the owner can write it - RLS refuses everyone else, which
+// is correct - so a refusal here is expected rather than a fault, and is counted
+// instead of being reported as one.
+async function persistDiscoveredIsrcs(trackList) {
+  const found = trackList.filter(t => t._isrcDiscovered && t.id && t.isrc);
+  if (!found.length) return;
+  let written = 0, refused = 0;
+  for (const t of found) {
+    const { error } = await sbClient.from('playlist_tracks')
+      .update({ isrc: t.isrc }).eq('id', t.id);
+    if (error) refused++; else { written++; delete t._isrcDiscovered; }
+  }
+  // Said out loud either way. A backfill that quietly writes nothing looks
+  // exactly like a backfill that worked.
+  console.warn(`[tunemail] isrc backfill: ${written} written, ${refused} refused of ${found.length} found`);
 }
 
 // One preview at a time - two tracks playing over each other is nobody's idea.

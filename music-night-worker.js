@@ -164,12 +164,75 @@ async function resolveIsrc(isrc, env, ctx) {
 // it happens here. The id is never taken from the request: whoever holds a valid
 // token deletes themselves and nobody else. Accepting an id from the body would
 // turn one leaked token into a way to erase any account.
+// Removes every file this account uploaded to the feedback bucket. The upload
+// path is `${uid}/${timestamp}.${ext}`, so one prefix covers all of them - which
+// is the reason the path was shaped that way rather than being flat.
+//
+// Done through the Storage API rather than a SQL delete on storage.objects: the
+// row and the stored object are two different things, and removing the row can
+// leave the file behind.
+async function deleteUserScreenshots(uid, env) {
+  const h = {
+    apikey: env.SUPABASE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+  };
+  const names = [];
+
+  // A person can send a lot of feedback over a lifetime, so this pages rather
+  // than assuming one listing covers it.
+  for (let offset = 0; offset < 1000; offset += 100) {
+    let page;
+    try {
+      const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/feedback-screenshots`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify({ prefix: `${uid}/`, limit: 100, offset }),
+      });
+      if (!r.ok) return { error: `list ${r.status}` };
+      page = await r.json();
+    } catch {
+      return { error: "list unreachable" };
+    }
+    if (!Array.isArray(page) || !page.length) break;
+    for (const o of page) if (o?.name) names.push(`${uid}/${o.name}`);
+    if (page.length < 100) break;
+  }
+
+  if (!names.length) return { removed: 0 };
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/feedback-screenshots`, {
+      method: "DELETE",
+      headers: h,
+      body: JSON.stringify({ prefixes: names }),
+    });
+    if (!r.ok) return { error: `remove ${r.status}` };
+  } catch {
+    return { error: "remove unreachable" };
+  }
+  return { removed: names.length };
+}
+
 async function deleteAccount(request, env) {
   const j = (data, status) => json(data, status, cors());
 
   const user = await verifyUser(request, env);
   if (!user) return j({ error: "Sign in first" }, 401);
   if (!env.SUPABASE_KEY) return j({ error: "Not configured" }, 503);
+
+  // Uploaded files first. storage.objects has no foreign key to auth.users, so
+  // no cascade reaches them: deleting the account would leave every screenshot
+  // sitting in a public bucket, still served, with the row that pointed at it
+  // gone. The privacy policy says everything goes, so everything has to go.
+  //
+  // This runs BEFORE the auth delete on purpose. If it fails, the account still
+  // exists and the whole thing can be retried; the other order would leave
+  // orphans nobody can find the owner of.
+  const shots = await deleteUserScreenshots(user.id, env);
+  if (shots.error) {
+    return j({ error: "Could not delete your uploaded files", detail: shots.error }, 502);
+  }
 
   const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
     method: "DELETE",
