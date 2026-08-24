@@ -755,6 +755,10 @@ button {
       font-size: 20px; line-height: 1; padding: 0;
     }
     .fb-del:hover { color: #f87171; }
+    /* On a phone in landscape the sheet is taller than the screen once a few
+       past messages are in it. The history scrolls; the title and the send
+       button stay where they are. */
+    #fb-replies { max-height: 34vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .fb-shot-link { display: block; margin-top: 8px; }
     .fb-shot-link img {
       max-width: 100%; max-height: 140px; border-radius: 6px;
@@ -771,7 +775,10 @@ button {
       font-family: var(--font-text); font-size: 12.5px;
     }
     .fb-attach-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+    /* A CSS display beats the hidden attribute, so without this the empty
+       preview sat there offering to remove a screenshot nobody attached. */
     .fb-attach-preview { display: inline-flex; align-items: center; gap: 8px; }
+    .fb-attach-preview[hidden] { display: none; }
     .fb-attach-preview img {
       width: 40px; height: 40px; border-radius: 6px; object-fit: cover;
       border: 1px solid var(--border);
