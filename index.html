@@ -758,7 +758,14 @@ button {
     /* On a phone in landscape the sheet is taller than the screen once a few
        past messages are in it. The history scrolls; the title and the send
        button stay where they are. */
-    #fb-replies { max-height: 34vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    /* dvh, not vh: on iOS the keyboard shrinks the visible area but leaves vh
+       at its full-screen value, so a sheet sized in vh grows out from under
+       the very keyboard you are typing on. vh first for anything too old to
+       know dvh. */
+    #fb-replies {
+      max-height: 34vh; max-height: 34dvh;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+    }
     .fb-shot-link { display: block; margin-top: 8px; }
     .fb-shot-link img {
       max-width: 100%; max-height: 140px; border-radius: 6px;
