@@ -159,6 +159,156 @@ async function resolveIsrc(isrc, env, ctx) {
 }
 
 
+// ── Deezer, which a browser cannot call at all ───────────────────────────────
+// api.deezer.com sends no Access-Control-Allow-Origin, so every fetch to it
+// from the page fails with "TypeError: Failed to fetch" before it reaches the
+// network. The app had been calling it directly since the beginning and the
+// failure was invisible: the call sat inside a try/catch that returned null,
+// which is indistinguishable from "this track is not on Deezer". Measured in
+// the live page: 3 of 3 endpoints failed, including the one used for every
+// exact Deezer link on every playlist.
+//
+// So it moves here. Unlike iTunes - which answers 429 to anything from a
+// Worker, because Apple counts by address and Cloudflare's egress is shared -
+// Deezer's behaviour from here is not something to assume. Every failure
+// below returns its real status instead of an empty answer, so if Deezer does
+// throttle this it says so rather than looking like an empty catalogue.
+
+const deezerJson = (data, status = 200) => new Response(JSON.stringify(data), {
+  status,
+  headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": "public, max-age=86400" },
+});
+
+async function deezerGet(path) {
+  const r = await fetch(`https://api.deezer.com/${path}`, {
+    headers: { "User-Agent": "tunemail/1.0 (+https://tunemail.app)" },
+  });
+  if (!r.ok) return { __status: r.status };
+  const j = await r.json().catch(() => null);
+  // Deezer answers 200 with {"error":{...}} for a quota breach, so the status
+  // alone does not tell you whether it worked.
+  if (j && j.error) return { __status: 429, __detail: j.error.type || "error" };
+  return j;
+}
+
+// GET /deezer?isrc=... - the exact Deezer track for a code.
+async function deezerByIsrc(isrc, ctx) {
+  if (!/^[A-Z0-9]{12}$/i.test(isrc)) return deezerJson({ error: "bad isrc" }, 400);
+
+  const cacheKey = new Request(`https://cache.tunemail/dz/${isrc}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const d = await deezerGet(`track/isrc:${encodeURIComponent(isrc)}`);
+  if (d?.__status) {
+    // Not cached: a throttle is temporary and must not be remembered as a miss.
+    return deezerJson({ error: `deezer ${d.__status}`, detail: d.__detail || null }, 502);
+  }
+  const out = d?.link
+    ? deezerJson({
+        found: true, isrc,
+        deezer: d.link,
+        artwork: d.album?.cover_big || d.album?.cover_medium || null,
+        preview: d.preview || null,
+        durationMs: d.duration ? d.duration * 1000 : null,
+      })
+    : deezerJson({ found: false });
+  if (ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  return out;
+}
+
+// GET /deezer?id=... - what a Deezer track link actually points at.
+// Used to check a link somebody typed in, which is the difference between
+// trusting a stranger and checking their claim.
+async function deezerById(id, ctx) {
+  if (!/^\d{1,12}$/.test(id)) return deezerJson({ error: "bad id" }, 400);
+
+  const cacheKey = new Request(`https://cache.tunemail/dzid/${id}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const d = await deezerGet(`track/${id}`);
+  if (d?.__status) return deezerJson({ error: `deezer ${d.__status}` }, 502);
+  const out = d?.id
+    ? deezerJson({ found: true, artist: d.artist?.name || null, title: d.title || null, isrc: d.isrc || null })
+    : deezerJson({ found: false });
+  if (ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  return out;
+}
+
+// GET /isrc-find?artist=&title=&ms= - the code for a recording that has none.
+//
+// Name matching alone is not enough. A standard exists in many takes, and a
+// wrong ISRC is worse than no ISRC: it produces a link that carries the
+// exact-match tick and opens a different record. Duration is the separator.
+// Measured across 35 tracks: name matching alone accepted 5 wrong recordings,
+// among them a My Favorite Things fifteen minutes from the one asked for; the
+// 12s gate rejected all 5 and kept 33.
+async function isrcFind(params, ctx) {
+  const artist = (params.get("artist") || "").slice(0, 200).trim();
+  const title = (params.get("title") || "").slice(0, 200).trim();
+  const ms = parseInt(params.get("ms") || "0", 10) || 0;
+  if (!artist || !title) return deezerJson({ error: "artist and title required" }, 400);
+
+  const cacheKey = new Request(
+    `https://cache.tunemail/find/${encodeURIComponent(artist)}/${encodeURIComponent(title)}/${ms}`
+  );
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  // A trailing "- Take 8" or "- Remastered" qualifies the same tune; Deezer
+  // files it under the bare title. Artists arrive semicolon-separated from
+  // Spotify and comma-separated from CSV; the first is the filing name.
+  const bare = (s) => s.split(/\s+-\s+/)[0].trim();
+  const lead = artist.split(/[;,]/)[0].trim();
+  const short = bare(title);
+
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "").replace(/[’'`´]/g, "'")
+    .replace(/\s*[\(\[].*?[\)\]]\s*/g, " ")
+    .replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim();
+
+  let best = null, bestDrift = Infinity, throttled = null;
+  for (const q of [`artist:"${lead}" track:"${short}"`, `${lead} ${short}`]) {
+    const s = await deezerGet(`search?q=${encodeURIComponent(q)}&limit=25`);
+    if (s?.__status) { throttled = s.__status; continue; }
+    for (const c of (s?.data || [])) {
+      const ct = norm(c.title), want = norm(short);
+      if (ct !== want && !ct.startsWith(want)) continue;
+      const ca = norm(c.artist?.name), wa = norm(lead);
+      if (!ca.includes(wa) && !wa.includes(ca)) continue;
+      const drift = ms ? Math.abs(ms - c.duration * 1000) : 0;
+      if (drift < bestDrift) { bestDrift = drift; best = c; }
+    }
+    if (best && bestDrift <= 4000) break;
+  }
+
+  // Nothing was actually asked, so nothing may be concluded - and nothing cached.
+  if (!best && throttled) return deezerJson({ error: `deezer ${throttled}` }, 502);
+
+  if (!best || bestDrift > 12000) {
+    const miss = deezerJson({ found: false, reason: best ? "duration" : "name" });
+    if (ctx) ctx.waitUntil(cache.put(cacheKey, miss.clone()));
+    return miss;
+  }
+
+  const full = await deezerGet(`track/${best.id}`);
+  if (full?.__status) return deezerJson({ error: `deezer ${full.__status}` }, 502);
+  const out = full?.isrc
+    ? deezerJson({
+        found: true, isrc: full.isrc, deezer: full.link || null,
+        driftMs: bestDrift,
+        artwork: full.album?.cover_big || null, preview: full.preview || null,
+      })
+    : deezerJson({ found: false, reason: "no-isrc" });
+  if (ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  return out;
+}
+
+
 // ── POST /delete-account - required by App Store rule 5.1.1(v) ───────────────
 // Deleting an auth user needs the service key, which cannot live in the page, so
 // it happens here. The id is never taken from the request: whoever holds a valid
@@ -370,6 +520,17 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/resolve") {
       return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
+    }
+
+    if (request.method === "GET" && url.pathname === "/deezer") {
+      const byId = url.searchParams.get("id");
+      return byId
+        ? deezerById(byId, ctx)
+        : deezerByIsrc(url.searchParams.get("isrc") || "", ctx);
+    }
+
+    if (request.method === "GET" && url.pathname === "/isrc-find") {
+      return isrcFind(url.searchParams, ctx);
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/p/")) {

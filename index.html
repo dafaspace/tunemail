@@ -3140,47 +3140,18 @@ const isrcLookupCache = new Map();
 async function discoverIsrc(artist, title, durationMs) {
   const cacheKey = `${artist}|${title}`;
   if (isrcLookupCache.has(cacheKey)) return isrcLookupCache.get(cacheKey);
-
-  // A trailing "- Take 8" or "- Remastered" qualifies the same tune; Deezer
-  // usually files it under the bare title.
-  const bare = s => String(s || '').split(/\s+-\s+/)[0].trim();
-  // Artists arrive semicolon-separated from Spotify and comma-separated from
-  // CSV. The first one is the one Deezer files the track under.
-  const lead = String(artist || '').split(/[;,]/)[0].trim();
-  const short = bare(title);
-
-  const norm = s => String(s || '').toLowerCase().normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '').replace(/[’'`´]/g, "'")
-    .replace(/\s*[\(\[].*?[\)\]]\s*/g, ' ')
-    .replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  let best = null, bestDrift = Infinity;
   try {
-    for (const q of [`artist:"${lead}" track:"${short}"`, `${lead} ${short}`]) {
-      const r = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=25`);
-      if (!r.ok) continue;
-      const j = await r.json();
-      for (const c of (j?.data || [])) {
-        const ct = norm(c.title), want = norm(short);
-        if (ct !== want && !ct.startsWith(want)) continue;
-        const ca = norm(c.artist?.name), wa = norm(lead);
-        if (!ca.includes(wa) && !wa.includes(ca)) continue;
-        // No duration to compare against means no way to tell the takes apart,
-        // so the first name match is taken but only when nothing better exists.
-        const drift = durationMs ? Math.abs(durationMs - c.duration * 1000) : 0;
-        if (drift < bestDrift) { bestDrift = drift; best = c; }
-      }
-      if (best && bestDrift <= 4000) break;
-    }
-    if (!best || bestDrift > 12000) { isrcLookupCache.set(cacheKey, null); return null; }
-
-    const full = await fetch(`https://api.deezer.com/track/${best.id}`).then(x => x.ok ? x.json() : null);
-    const found = full?.isrc || null;
+    const q = new URLSearchParams({ artist, title, ms: String(durationMs || 0) });
+    const r = await fetch(`${MUSIC_NIGHT_WORKER}/isrc-find?${q}`);
+    const j = await r.json().catch(() => null);
+    // A throttle is not a miss. Remembering it as one would mean the track is
+    // never asked about again in this session for a reason that was temporary.
+    if (!r.ok || j?.error) { console.warn('isrc-find:', j?.error || r.status); return null; }
+    const found = j?.found ? j.isrc : null;
     isrcLookupCache.set(cacheKey, found);
     return found;
   } catch (e) {
-    console.warn('isrc discover:', e.message);
-    isrcLookupCache.set(cacheKey, null);
+    console.warn('isrc-find:', e.message);
     return null;
   }
 }
@@ -3228,26 +3199,32 @@ async function enrichTrack(t) {
   return out;
 }
 
+// Through the worker, because a browser cannot call api.deezer.com at all: it
+// sends no Access-Control-Allow-Origin, so the request fails before it leaves
+// the page. This function used to call it directly, and had therefore never
+// once returned a link - the failure landed in the catch below and came back as
+// null, which reads exactly like "not on Deezer". Every Deezer link on every
+// playlist was a search URL because of it.
+//
+// A throttle and a genuine miss are told apart on purpose. Only a miss is
+// remembered; caching a 429 as "no such track" would make an outage permanent.
 async function resolveByIsrc(isrc) {
   if (!isrc) return null;
   if (isrcCache.has(isrc)) return isrcCache.get(isrc);
   try {
-    const res = await fetch(`https://api.deezer.com/track/isrc:${encodeURIComponent(isrc)}`);
-    if (!res.ok) { isrcCache.set(isrc, null); return null; }
-    const d = await res.json();
-    if (!d || d.error || !d.link) { isrcCache.set(isrc, null); return null; }
+    const res = await fetch(`${MUSIC_NIGHT_WORKER}/deezer?isrc=${encodeURIComponent(isrc)}`);
+    const d = await res.json().catch(() => null);
+    if (!res.ok || d?.error) { console.warn('deezer:', d?.error || res.status); return null; }
+    if (!d?.found) { isrcCache.set(isrc, null); return null; }
     const out = {
-      deezer:  d.link,
+      deezer:  d.deezer,
       preview: d.preview || null,
-      artwork: d.album?.cover_medium || null,
-      title:   d.title || null,
-      artist:  d.artist?.name || null,
+      artwork: d.artwork || null,
     };
     isrcCache.set(isrc, out);
     return out;
   } catch (e) {
     console.warn('isrc resolve:', e.message);
-    isrcCache.set(isrc, null);
     return null;
   }
 }
@@ -4170,11 +4147,14 @@ async function verifyDirectUrl(key, url, artist, track) {
     if (key === 'deezer') {
       const id = (url.match(/track\/(\d+)/) || [])[1];
       if (!id) return false;
-      const r = await fetch(`https://api.deezer.com/track/${id}`);
+      // Via the worker: the browser cannot reach api.deezer.com, so this check
+      // used to fail every time and send every Deezer correction to human
+      // review. Failing safe, but for the wrong reason and on every single one.
+      const r = await fetch(`${MUSIC_NIGHT_WORKER}/deezer?id=${id}`);
       if (!r.ok) return false;
-      const d = await r.json();
-      if (!d || d.error) return false;
-      return scoreCandidate({ artistName: d.artist?.name, trackName: d.title }, artist, track) > 0;
+      const d = await r.json().catch(() => null);
+      if (!d?.found) return false;
+      return scoreCandidate({ artistName: d.artist, trackName: d.title }, artist, track) > 0;
     }
     if (key === 'appleMusic') {
       const id = (url.match(/[?&]i=(\d+)/) || url.match(/\/(\d+)(?:\?|$)/) || [])[1];
