@@ -2641,7 +2641,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v56';
+const APP_BUILD = 'v57';
 console.log(`[tunemail] build ${APP_BUILD}`);
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('build-line');
@@ -3956,7 +3956,13 @@ function renderTrackList(tracks, playlistId) {
     </div>`;
   }).join('');
 
+  // Two independent passes, deliberately not chained. Chaining them is what
+  // made the backfill dead the first time: enrichment's own early return
+  // decided whether ISRC work happened, and enrichment returns early for every
+  // track whose artwork is already cached. Neither of these should be able to
+  // stop the other, including by throwing.
   enrichTrackList(container, tracks);
+  backfillIsrcs(tracks);
 
   // Fetch odesli links sequentially to respect rate limit (10 req/min)
   const uriTracks = tracks.filter(t => t.spotify_uri);
@@ -5875,7 +5881,6 @@ async function enrichTrackList(container, trackList) {
       });
     }
   }
-  backfillIsrcs(trackList);
 }
 
 // Backfilling an ISRC is its own pass, not a side effect of enrichment.
