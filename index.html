@@ -748,6 +748,10 @@ button {
       border-color: rgba(248,113,113,0.6);
     }
 
+    .build-line {
+      margin-top: 22px; text-align: center;
+      font-size: 11.5px; color: var(--muted); letter-spacing: .02em;
+    }
     .fb-del {
       display: inline-flex; align-items: center; justify-content: center;
       min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0;
@@ -2219,6 +2223,10 @@ button {
           </p>
           <button class="btn btn-ghost" id="btn-delete-account">Delete my account</button>
         </div>
+
+        <!-- Where every app puts it, and the answer to the first question any
+             bug report raises: which build is this. -->
+        <p class="build-line" id="build-line"></p>
       </div>
     </div>
   </div>
@@ -2621,6 +2629,16 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
   openModal('overlay-account');
 });
 
+// Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
+// sent, so no report has ever said which build produced it - which is exactly
+// the question you ask first when someone says a thing is broken.
+const APP_BUILD = 'v55';
+console.log(`[tunemail] build ${APP_BUILD}`);
+document.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('build-line');
+  if (el) el.textContent = `Tunemail ${APP_BUILD}`;
+});
+
 // ── Feedback ──────────────────────────────────────────────────────────
 const MUSIC_NIGHT_WORKER = 'https://music-night-worker.dafa4me.workers.dev';
 let _fbType = 'other';
@@ -2809,7 +2827,7 @@ async function submitFeedback() {
       user_name:   displayName,
       type:        _fbType,
       message,
-      app_version: '1.0.0',
+      app_version: APP_BUILD,
       user_agent:  navigator.userAgent,
       app:         'music-night',
       screenshot_url: shotUrl,
@@ -5883,10 +5901,13 @@ async function backfillIsrcs(trackList) {
   };
   await Promise.all(Array.from({ length: 4 }, worker));
 
-  // Said out loud either way, including the zero. A backfill that quietly wrote
-  // nothing looks exactly like one that worked - which is how the first version
-  // of this went unnoticed.
+  // Said out loud where a person can see it. The first version reported only to
+  // the console, which is why "it wrote nothing" and "I never saw the message"
+  // were indistinguishable for two rounds - on a phone there is no console at
+  // all, and the owner is the only one this ever runs for.
   console.warn(`[tunemail] isrc backfill: ${written} written, ${refused} refused, ${found} found of ${todo.length} without a code`);
+  if (written) showToast(`Found exact links for ${written} track${written === 1 ? '' : 's'}`);
+  else if (todo.length) showToast(`No exact link found for ${todo.length} track${todo.length === 1 ? '' : 's'}`);
 }
 
 // One preview at a time - two tracks playing over each other is nobody's idea.
