@@ -5,3 +5,8 @@ index_*.html
 music-night-instructions.md
 MSN.md
 PIPELINE.md
+
+# Never in the repo: the Apple .p8 signing key and local test data.
+keys/
+tests/
+*.p8
