@@ -3195,10 +3195,10 @@ async function enrichTrack(t) {
   let out = null;
   try {
     if (!t.isrc) {
+      // Used for this render only. Writing it back is backfillIsrcs' job, which
+      // runs whether or not enrichment had anything to do.
       const found = await discoverIsrc(t.artist, t.track_name, t.duration_ms);
-      // Marked so the caller can write it back once rather than rediscovering
-      // it on every visit.
-      if (found) { t.isrc = found; t._isrcDiscovered = true; }
+      if (found) t.isrc = found;
     }
     if (t.isrc) {
       // Apple first: exact, and it carries artwork, preview and a real track URL
@@ -5847,26 +5847,46 @@ async function enrichTrackList(container, trackList) {
         enrich_missed_at: new Date().toISOString(),
       });
     }
-    persistDiscoveredIsrcs(trackList);
   }
+  backfillIsrcs(trackList);
 }
 
-// An ISRC found by discoverIsrc belongs on the row, not in a variable that dies
-// with the page. Only the owner can write it - RLS refuses everyone else, which
-// is correct - so a refusal here is expected rather than a fault, and is counted
-// instead of being reported as one.
-async function persistDiscoveredIsrcs(trackList) {
-  const found = trackList.filter(t => t._isrcDiscovered && t.id && t.isrc);
-  if (!found.length) return;
-  let written = 0, refused = 0;
-  for (const t of found) {
-    const { error } = await sbClient.from('playlist_tracks')
-      .update({ isrc: t.isrc }).eq('id', t.id);
-    if (error) refused++; else { written++; delete t._isrcDiscovered; }
-  }
-  // Said out loud either way. A backfill that quietly writes nothing looks
-  // exactly like a backfill that worked.
-  console.warn(`[tunemail] isrc backfill: ${written} written, ${refused} refused of ${found.length} found`);
+// Backfilling an ISRC is its own pass, not a side effect of enrichment.
+//
+// It was a side effect at first, and wrote nothing: enrichment answers "does
+// this track have artwork yet", and a track whose artwork was cached months ago
+// skips the whole body with a `continue` before any ISRC work happens. JAZZ
+// measured 0 of 35 written after opening the playlist, because all 35 had
+// artwork already. Two different questions were sharing one gate, and the gate
+// belonged to the other question.
+//
+// Only the owner can write - RLS refuses everyone else, correctly - so a
+// refusal is expected rather than a fault and is counted, not thrown.
+async function backfillIsrcs(trackList) {
+  if (!currentUser) return;
+  const todo = trackList.filter(t => t.id && !t.isrc);
+  if (!todo.length) return;
+
+  let found = 0, written = 0, refused = 0;
+  const queue = [...todo];
+  const worker = async () => {
+    while (queue.length) {
+      const t = queue.shift();
+      const isrc = await discoverIsrc(t.artist, t.track_name, t.duration_ms);
+      if (!isrc) continue;
+      found++;
+      t.isrc = isrc;
+      const { error } = await sbClient.from('playlist_tracks')
+        .update({ isrc }).eq('id', t.id);
+      if (error) refused++; else written++;
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+
+  // Said out loud either way, including the zero. A backfill that quietly wrote
+  // nothing looks exactly like one that worked - which is how the first version
+  // of this went unnoticed.
+  console.warn(`[tunemail] isrc backfill: ${written} written, ${refused} refused, ${found} found of ${todo.length} without a code`);
 }
 
 // One preview at a time - two tracks playing over each other is nobody's idea.
