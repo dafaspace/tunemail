@@ -963,7 +963,16 @@ button {
       margin: 12px auto 0;
     }
 
+    /* Sticky, because the sheet itself is the scroller. With thirty-five tracks
+       the title, Edit and the close button scrolled away and never came back
+       within reach - the way out of the screen was somewhere above the top of
+       the list. Opaque background so the handle passes underneath rather than
+       through. */
     .modal-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--surface);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -2034,7 +2043,7 @@ button {
 
   <!-- Playlist Detail Modal (track list) -->
   <div class="overlay" id="overlay-playlist-detail">
-    <div class="modal" style="max-height:92vh">
+    <div class="modal">
       <div class="modal-handle"></div>
       <div class="modal-header">
         <div>
@@ -2073,7 +2082,7 @@ button {
 
   <!-- Spotify Import Modal -->
   <div class="overlay" id="overlay-spotify">
-    <div class="modal" style="max-height:92vh">
+    <div class="modal">
       <div class="modal-handle"></div>
       <div class="modal-header">
         <span class="modal-title">Import from Spotify</span>
@@ -2108,7 +2117,7 @@ button {
 
   <!-- Import Modal -->
   <div class="overlay" id="overlay-import">
-    <div class="modal" style="max-height:92vh">
+    <div class="modal">
       <div class="modal-handle"></div>
       <div class="modal-header">
         <span class="modal-title">Import Tracks</span>
@@ -2632,7 +2641,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v55';
+const APP_BUILD = 'v56';
 console.log(`[tunemail] build ${APP_BUILD}`);
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('build-line');
