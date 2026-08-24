@@ -2705,6 +2705,15 @@ document.getElementById('fb-replies').addEventListener('click', e => {
 
 async function deleteFeedback(id) {
   try {
+    // The file first, while the row that names it still exists. The other order
+    // loses the path and leaves the object behind with nothing pointing at it.
+    const { data: row } = await sbClient.from('feedback')
+      .select('screenshot_url').eq('id', id).eq('user_id', currentUser.id).maybeSingle();
+    const shot = row?.screenshot_url;
+    if (shot && !/^https?:\/\//i.test(shot)) {
+      const { error } = await sbClient.storage.from('feedback-screenshots').remove([shot]);
+      if (error) console.warn('screenshot remove:', error.message);
+    }
     // The user_id filter is what RLS enforces anyway; stating it here means a
     // policy change can never silently widen what this call reaches.
     await sbClient.from('feedback').delete().eq('id', id).eq('user_id', currentUser.id);
@@ -2755,14 +2764,29 @@ function clearFbShot() {
 async function uploadFbShot(file) {
   if (!file || !currentUser) return null;
   const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-  // Path starts with the user id: the storage policy uses it to keep one
-  // person's uploads out of another's folder.
+  // Path starts with the user id: every storage policy on this bucket keys off
+  // that first segment, and the account-deletion sweep removes by that prefix.
   const path = `${currentUser.id}/${Date.now()}.${ext}`;
   const { error } = await sbClient.storage.from('feedback-screenshots')
     .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type });
   if (error) throw new Error(error.message);
-  const { data } = sbClient.storage.from('feedback-screenshots').getPublicUrl(path);
-  return data?.publicUrl || null;
+  // The PATH is stored, not a URL. The bucket is private, so there is no
+  // permanent address to keep - a reader mints a short signed one when it is
+  // actually being looked at.
+  return path;
+}
+
+// Rows written while the bucket was public hold a full URL; new ones hold a
+// path. Both have to render, so the shape is decided per value rather than by
+// assuming everything was written after the change.
+async function fbShotSrc(value) {
+  const v = String(value || '');
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  const { data, error } = await sbClient.storage.from('feedback-screenshots')
+    .createSignedUrl(v, 300);
+  if (error) { console.warn('screenshot url:', error.message); return null; }
+  return data?.signedUrl || null;
 }
 
 async function submitFeedback() {
@@ -2847,8 +2871,8 @@ async function loadFeedbackReplies() {
           </div>
           <div style="font-size:13px;color:#ccc">${escHtml(f.message)}</div>
           ${f.screenshot_url ? `
-            <a href="${safeUrl(f.screenshot_url)}" target="_blank" rel="noopener noreferrer" class="fb-shot-link">
-              <img src="${safeUrl(f.screenshot_url)}" alt="Screenshot you attached" loading="lazy">
+            <a class="fb-shot-link" data-shot="${escHtml(f.screenshot_url)}" target="_blank" rel="noopener noreferrer">
+              <img alt="Screenshot you attached" loading="lazy">
             </a>` : ''}
           ${f.reply ? `
             <div class="fb-reply-card">
@@ -2856,6 +2880,15 @@ async function loadFeedbackReplies() {
               <div class="fb-reply-text">${escHtml(f.reply)}</div>
             </div>` : ''}
         </div>`).join('')}`;
+
+    // Signed after painting, not during: signing is a network call per file and
+    // the list should appear at once rather than waiting on the pictures.
+    for (const a of el.querySelectorAll('.fb-shot-link[data-shot]')) {
+      const src = await fbShotSrc(a.dataset.shot);
+      if (!src) { a.remove(); continue; }
+      a.href = src;
+      a.querySelector('img').src = src;
+    }
   } catch (_) { el.style.display = 'none'; }
 }
 

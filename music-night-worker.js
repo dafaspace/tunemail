@@ -309,6 +309,35 @@ async function isrcFind(params, ctx) {
 }
 
 
+// A signed URL for one screenshot, long enough to still open when the report is
+// read days later. Thirty days rather than an hour: this lands in the owner's
+// own Telegram, and a bug report whose picture has expired by the time anyone
+// looks at it is a bug report without a picture.
+async function signScreenshot(path, env) {
+  if (!env.SUPABASE_KEY) return null;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/sign/feedback-screenshots/${path.split("/").map(encodeURIComponent).join("/")}`,
+      {
+        method: "POST",
+        headers: {
+          apikey: env.SUPABASE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 30 }),
+      }
+    );
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    // The API returns a path beginning with /object/sign/...
+    return j?.signedURL ? `${SUPABASE_URL}/storage/v1${j.signedURL}` : null;
+  } catch {
+    return null;
+  }
+}
+
+
 // ── POST /delete-account - required by App Store rule 5.1.1(v) ───────────────
 // Deleting an auth user needs the service key, which cannot live in the page, so
 // it happens here. The id is never taken from the request: whoever holds a valid
@@ -608,11 +637,23 @@ export default {
       const typeEmoji = { bug: "🔧", idea: "💡", other: "💬" }[type] || "💬";
       // The id goes FIRST: the regex on the way back takes the first match, and
       // everything below this line is text the user controls.
-      // Only a URL on our own storage host is ever echoed into the chat: the
-      // field arrives from the client, and an arbitrary link pasted into the
-      // owner's Telegram would be a small phishing channel.
-      const shot = /^https:\/\/rqruaqoecvpythbvnozf\.supabase\.co\/storage\/v1\/object\/public\//
-        .test(String(screenshot_url || "")) ? screenshot_url : null;
+      // The bucket is private, so what arrives is a storage PATH, not a URL, and
+      // it has to be signed before the owner can open it. Signing here also
+      // settles the injection question the old public-URL check was for: the
+      // link put into Telegram is one this worker minted, so the client cannot
+      // choose the destination at all - only which of its own files is shown.
+      //
+      // The path is pinned to the caller's own id. Without that, one valid
+      // token could ask for a signed URL to anybody's screenshot.
+      let shot = null;
+      const rawPath = String(screenshot_url || "");
+      if (rawPath && rawPath.startsWith(`${user.id}/`) && !rawPath.includes("..")) {
+        shot = await signScreenshot(rawPath, env);
+      } else if (/^https:\/\/rqruaqoecvpythbvnozf\.supabase\.co\/storage\/v1\/object\/public\//.test(rawPath)) {
+        // Written while the bucket was still public. Kept working rather than
+        // broken, but nothing new takes this path.
+        shot = rawPath;
+      }
 
       const text =
         `\`id:${feedback_id}\`\n${typeEmoji} *Tunemail Feedback*\n\n` +
