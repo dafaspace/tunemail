@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION on every deploy that changes the precached files below,
  * otherwise returning visitors keep the old shell until the cache is evicted.
  */
-const CACHE_VERSION = 'v57';
+const CACHE_VERSION = 'v58';
 const CACHE_NAME = `tunemail-${CACHE_VERSION}`;
 
 /* Same-origin shell. Without any one of these the page cannot render, so these
@@ -46,19 +46,39 @@ async function put(cache, request, response) {
   return true;
 }
 
-async function fetchAndPut(cache, url) {
-  const res = await fetch(url, { cache: 'reload', credentials: 'omit' });
-  if (!res.ok) throw new Error(`${res.status} for ${url}`);
-  await put(cache, url, res);
-}
-
+/* Fetch everything first, put nothing until all of it arrived. This keeps the
+ * all-or-nothing property cache.addAll had - a half-filled shell is worse than
+ * no shell - while forcing `cache: 'reload'` on every request, which addAll
+ * cannot do.
+ *
+ * That flag is the whole point. GitHub Pages serves index.html with
+ * `cache-control: max-age=600`, and the HTTP cache sits UNDERNEATH the service
+ * worker: a plain fetch() inside a worker is answered from it without the
+ * network being touched at all. So a new worker would install, activate, clear
+ * the old caches - and refill them with the same ten-minute-old HTML it was
+ * meant to replace. Measured: the page ran build v56 while sw.js was already
+ * v57 and the server was serving v57 to curl. */
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(SHELL);
-    await Promise.all(VENDOR.map((url) => fetchAndPut(cache, url)));
+    const fetched = await Promise.all(
+      [...SHELL, ...VENDOR].map(async (url) => {
+        const res = await fetch(url, { cache: 'reload', credentials: 'omit' });
+        if (!res.ok) throw new Error(`${res.status} for ${url}`);
+        return [url, res];
+      })
+    );
+    for (const [url, res] of fetched) await put(cache, url, res);
     await self.skipWaiting();
   })());
+});
+
+/* So the page can ask which build is actually serving it, instead of that
+ * being unanswerable from the outside. */
+self.addEventListener('message', (event) => {
+  if (event.data === 'version') {
+    event.source?.postMessage({ swBuild: CACHE_VERSION });
+  }
 });
 
 self.addEventListener('activate', (event) => {
@@ -97,7 +117,10 @@ async function cacheFirst(request) {
 async function navigation(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const res = await fetch(request);
+    // 'reload' skips the HTTP cache on the way out. Without it "network first"
+    // is a lie: max-age=600 on the HTML means the browser answers this from its
+    // own cache for ten minutes and the network is never reached.
+    const res = await fetch(request, { cache: 'reload' });
     if (res.ok) await put(cache, './index.html', res.clone());
     return res;
   } catch (err) {

@@ -2641,8 +2641,22 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v57';
+const APP_BUILD = 'v58';
 console.log(`[tunemail] build ${APP_BUILD}`);
+
+// The page and the worker are deployed together but delivered separately, and
+// for two rounds they disagreed without anything saying so: the page ran v56
+// while sw.js was v57. A mismatch means the HTML came from a cache, so say it
+// once, loudly, rather than letting it look like the code simply does not work.
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  const sw = e.data?.swBuild;
+  if (sw && sw !== APP_BUILD) {
+    console.warn(`[tunemail] STALE PAGE: running ${APP_BUILD}, worker is ${sw}. Reload.`);
+    const el = document.getElementById('build-line');
+    if (el) el.textContent = `Tunemail ${APP_BUILD} (worker ${sw} - reload)`;
+  }
+});
+navigator.serviceWorker?.ready.then(reg => reg.active?.postMessage('version'));
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('build-line');
   if (el) el.textContent = `Tunemail ${APP_BUILD}`;
