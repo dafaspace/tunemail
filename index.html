@@ -1296,12 +1296,15 @@ button {
     }
     /* 13px, matching Cinemail and matching the label it sits beside. It was
        26px here - twice the size of the word next to it, which is the thing
-       that read as wrong. The 1px lift is optical centring against the label's
-       cap height, not a nudge for its own sake. */
+       that read as wrong.
+       No translateY. Cinemail lifts its glyph 1px and I copied that, then
+       measured: against a 12px label there it centres, against our 13px one it
+       overshot to 1.92px above the cap centre. Removing it lands at 0.92px,
+       inside the 1px the house rule allows. A nudge tuned for someone else's
+       type metrics is not a constant. */
     #feedback-icon {
       display: block; line-height: 1;
-      transform: translateY(-1px);
-      transition: color 0.2s, text-shadow 0.2s, transform 0.2s;
+      transition: color 0.2s, text-shadow 0.2s;
     }
     #feedback-icon svg { display: block; }
     /* The button declares 13px and the label overrode it with 12. Both apps
@@ -1321,7 +1324,7 @@ button {
     .feedback-badge {
       display: none;
       position: absolute;
-      top: -1px; right: -3px;
+      top: -2px; right: -3px;
       width: 4px; height: 4px;
       background: #a78bfa;
       border-radius: 50%;
@@ -2694,7 +2697,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v62';
+const APP_BUILD = 'v63';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
