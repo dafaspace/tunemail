@@ -1,3 +1,13 @@
+-- SUPERSEDED - do not run. Kept for the record only.
+--
+-- Every id below belongs to the 35-track JAZZ playlist, which migration 008
+-- deletes: the playlist being kept is the one with 41 tracks. These statements
+-- would now match nothing.
+--
+-- The work they did is not lost. The app backfills ISRCs itself when the owner
+-- opens a playlist, and it will do it for the 41-track one, saying how many it
+-- wrote.
+
 -- JAZZ: 33 ISRC of 35.
 --
 -- Regenerated from the DEPLOYED worker, not from a local script, so these are
