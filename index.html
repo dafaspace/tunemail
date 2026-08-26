@@ -752,6 +752,15 @@ button {
       margin-top: 22px; text-align: center;
       font-size: 11.5px; color: var(--muted); letter-spacing: .02em;
     }
+    /* The only destructive primary in the app. Red because it should never be
+       reached for by accident, and disabled until the word is typed because a
+       tap should not be enough. */
+    .btn-danger {
+      background: #b3261e; color: #fff; border: 1px solid #b3261e;
+    }
+    .btn-danger:disabled { opacity: .4; cursor: default; }
+    .btn-danger:not(:disabled):hover { background: #9b201a; }
+
     .fb-del {
       display: inline-flex; align-items: center; justify-content: center;
       min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0;
@@ -2240,6 +2249,34 @@ button {
     </div>
   </div>
 
+  <!-- Deleting an account: our own sheet, not window.prompt. The browser's
+       dialog cannot be styled, cannot be dismissed by tapping outside, and on
+       the one screen where a person is being asked to destroy everything they
+       have it arrives looking like a page from a different application. -->
+  <div class="overlay" id="overlay-delete-account">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <div class="modal-title">Delete your account</div>
+        <button class="modal-close" aria-label="Cancel" data-close="overlay-delete-account"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="danger-note" style="margin-bottom:16px">
+          This removes your account, your profile, every playlist and track you
+          made, and any screenshots you sent. Links you have shared will stop
+          working. It happens at once and cannot be undone.
+        </p>
+        <label class="feedback-modal-label" for="del-confirm-input">Type DELETE to confirm</label>
+        <input id="del-confirm-input" class="input" type="text" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" placeholder="DELETE">
+        <div class="modal-footer" style="margin-top:18px;padding:0">
+          <button class="fb-btn-cancel" data-close="overlay-delete-account">Cancel</button>
+          <button class="btn btn-danger" id="btn-delete-confirm" disabled>Delete for ever</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Delete Confirm Modal -->
   <div class="overlay" id="overlay-confirm">
     <div class="modal">
@@ -2641,7 +2678,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v59';
+const APP_BUILD = 'v60';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4906,19 +4943,29 @@ document.getElementById('btn-signup').addEventListener('click', async () => {
 // Deleting an account is irreversible and the confirmation is sized to match:
 // typing the word is a deliberate act, where a second tap on a dialog is not.
 const _delAccount = document.getElementById('btn-delete-account');
-if (_delAccount) _delAccount.addEventListener('click', async () => {
-  const typed = window.prompt(
-    'This deletes your account, your playlists and your tracks permanently.\n\n' +
-    'Type DELETE to confirm.'
-  );
-  if (typed === null) return;
-  if (typed.trim().toUpperCase() !== 'DELETE') {
-    showToast('Not deleted - the word did not match');
-    return;
-  }
+const _delInput = document.getElementById('del-confirm-input');
+const _delConfirm = document.getElementById('btn-delete-confirm');
 
-  _delAccount.disabled = true;
-  _delAccount.textContent = 'Deleting...';
+if (_delAccount) _delAccount.addEventListener('click', () => {
+  _delInput.value = '';
+  _delConfirm.disabled = true;
+  _delConfirm.textContent = 'Delete for ever';
+  openModal('overlay-delete-account');
+  // Not focused on open: the field should be reached deliberately, and a
+  // keyboard springing up over the warning is the opposite of reading it.
+});
+
+// The word gates the button rather than being checked after the fact, so there
+// is no state where the destructive control is live and the word is wrong.
+if (_delInput) _delInput.addEventListener('input', () => {
+  _delConfirm.disabled = _delInput.value.trim().toUpperCase() !== 'DELETE';
+});
+
+if (_delConfirm) _delConfirm.addEventListener('click', async () => {
+  if (_delInput.value.trim().toUpperCase() !== 'DELETE') return;
+
+  _delConfirm.disabled = true;
+  _delConfirm.textContent = 'Deleting...';
   try {
     const { data: { session } } = await sbClient.auth.getSession();
     const res = await fetch(MUSIC_NIGHT_WORKER + '/delete-account', {
@@ -4934,8 +4981,8 @@ if (_delAccount) _delAccount.addEventListener('click', async () => {
     // should survive in memory to be rendered a moment later.
     window.location.replace(SITE_URL);
   } catch (e) {
-    _delAccount.disabled = false;
-    _delAccount.textContent = 'Delete my account';
+    _delConfirm.disabled = false;
+    _delConfirm.textContent = 'Delete for ever';
     showToast('Could not delete: ' + e.message);
   }
 });
