@@ -2641,7 +2641,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v58';
+const APP_BUILD = 'v59';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5862,12 +5862,20 @@ async function enrichTrackList(container, trackList) {
         paint(i, { artwork: hit.artwork_url, preview: hit.preview_url });
         continue;
       }
-      // A miss is worth remembering too. Four tracks on this playlist are not
-      // findable by search - "Dave Brubeck 40 Days" returns eight results
-      // without 40 Days among them - and without a marker they were re-asked on
-      // every single visit, forever, for an answer that will not change.
-      // A month is short enough that a catalogue addition still gets picked up.
-      if (hit?.enrich_missed_at) {
+      // A miss is worth remembering too. Some tracks are not findable by search
+      // - "Dave Brubeck 40 Days" returns eight results without 40 Days among
+      // them - and without a marker they were re-asked on every visit, forever,
+      // for an answer that will not change. A month is short enough that a
+      // catalogue addition still gets picked up.
+      //
+      // But the marker records that a NAME could not be found, and the cache is
+      // keyed by name. A track that has since gained an ISRC is a different
+      // question, and the old answer does not apply to it. Both of the tracks
+      // this was measured on - 40 Days and I Can't Break the Habit of You - had
+      // a working ISRC and a marker four days old, so the lookup that would
+      // have succeeded was skipped by a note saying the lookup that failed had
+      // failed.
+      if (!t.isrc && hit?.enrich_missed_at) {
         const age = Date.now() - new Date(hit.enrich_missed_at).getTime();
         if (age < 30 * 24 * 3600 * 1000) continue;
       }
