@@ -2266,9 +2266,11 @@ button {
           made, and any screenshots you sent. Links you have shared will stop
           working. It happens at once and cannot be undone.
         </p>
-        <label class="feedback-modal-label" for="del-confirm-input">Type DELETE to confirm</label>
-        <input id="del-confirm-input" class="input" type="text" autocomplete="off"
-               autocapitalize="characters" spellcheck="false" placeholder="DELETE">
+        <div class="form-group">
+          <label for="del-confirm-input">Type DELETE to confirm</label>
+          <input id="del-confirm-input" type="text" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false" placeholder="DELETE">
+        </div>
         <div class="modal-footer" style="margin-top:18px;padding:0">
           <button class="fb-btn-cancel" data-close="overlay-delete-account">Cancel</button>
           <button class="btn btn-danger" id="btn-delete-confirm" disabled>Delete for ever</button>
@@ -2678,7 +2680,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v60';
+const APP_BUILD = 'v61';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
