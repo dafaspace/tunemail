@@ -523,21 +523,54 @@ ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_nam
   });
 }
 
+// One real request to the database, and an honest answer about whether it
+// worked. The previous version ended in `.catch(() => {})`, so a keep-alive
+// that had stopped keeping anything alive looked exactly like one that was
+// working - and the first news of it is Supabase threatening to pause the
+// project, which is what happened.
+async function pingSupabase() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/track_links?select=id&limit=1`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
+    if (!r.ok) return { ok: false, detail: `supabase ${r.status}` };
+    // A paused project answers on a different host or not at all, so reaching
+    // here with a body is the thing worth confirming.
+    await r.text();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, detail: "unreachable" };
+  }
+}
+
 export default {
   // Supabase pauses a free project after a week without API activity and drops
   // its DNS record with it - the whole app dies until someone restores it by
   // hand. A cron trigger here keeps the counter at zero whether or not anybody
-  // opened the app. Set the schedule in the dashboard: Settings, Trigger
-  // Events, Cron Triggers.
+  // opened the app.
+  //
+  // IMPORTANT: this handler existing is not the same as it running. The
+  // schedule is a separate setting in the Cloudflare dashboard - Settings,
+  // Trigger Events, Cron Triggers - and pasting new code into the editor does
+  // NOT create or preserve it. Deploy the worker and the handler is there;
+  // forget the trigger and it is never called, silently, for as long as it
+  // takes somebody to notice the project being threatened with a pause.
+  //
+  // Check it is armed with: GET /keepalive?check=1
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(
-      fetch(`${SUPABASE_URL}/rest/v1/track_links?select=id&limit=1`, {
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      }).catch(() => {})
-    );
+    ctx.waitUntil((async () => {
+      const res = await pingSupabase();
+      if (!res.ok) {
+        // Better to be told the alarm is broken than to find out from Supabase.
+        await notifyOwner(env, `Keep-alive failed: ${res.detail}. The project may pause.`);
+      }
+      if (env.KEEPALIVE_KV) {
+        await env.KEEPALIVE_KV.put("last", new Date(event.scheduledTime).toISOString());
+      }
+    })());
   },
 
   async fetch(request, env, ctx) {
@@ -545,6 +578,26 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/delete-account") {
       return deleteAccount(request, env);
+    }
+
+    // GET /keepalive - the same ping the cron does, callable by hand, so
+    // "is the trigger actually set" is a question with an answer rather than
+    // something to be inferred from Supabase's warning emails.
+    if (request.method === "GET" && url.pathname === "/keepalive") {
+      const res = await pingSupabase();
+      let last = null;
+      if (env.KEEPALIVE_KV) last = await env.KEEPALIVE_KV.get("last");
+      return json(
+        {
+          reachable: res.ok,
+          detail: res.detail || null,
+          // null here means either no KV binding or the cron has never fired.
+          // If it is null a day after deploying, the trigger is not set.
+          lastScheduledRun: last,
+        },
+        res.ok ? 200 : 502,
+        cors()
+      );
     }
 
     if (request.method === "GET" && url.pathname === "/resolve") {
