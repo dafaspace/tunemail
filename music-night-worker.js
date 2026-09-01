@@ -523,24 +523,41 @@ ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_nam
   });
 }
 
-// One real request to the database, and an honest answer about whether it
-// worked. The previous version ended in `.catch(() => {})`, so a keep-alive
-// that had stopped keeping anything alive looked exactly like one that was
-// working - and the first news of it is Supabase threatening to pause the
-// project, which is what happened.
-async function pingSupabase() {
+// A WRITE, not a read.
+//
+// The previous version read one row and the project was threatened with a
+// pause anyway, with the cron demonstrably firing: Cloudflare's logs show four
+// scheduled runs across the 7 days before the warning, all successful. So the
+// trigger was never the problem and neither was the request failing. The only
+// assumption left was that Supabase counts a read as activity, and that is not
+// something observable from out here.
+//
+// A row update is a transaction in the database. There is no definition of
+// "activity" that excludes one, so this stops depending on their definition.
+//
+// It needs the service key: the table has RLS on and no policies, because
+// nothing else has any business touching it.
+async function pingSupabase(env) {
+  if (!env.SUPABASE_KEY) return { ok: false, detail: "no service key" };
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/track_links?select=id&limit=1`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/keepalive?id=eq.1`, {
+      method: "PATCH",
       headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: env.SUPABASE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        // Ask for the row back, so a PATCH that matched nothing is visible.
+        // PostgREST answers 204 either way, which reads as success.
+        Prefer: "return=representation",
       },
+      body: JSON.stringify({ last_ping: new Date().toISOString(), source: "cron" }),
     });
     if (!r.ok) return { ok: false, detail: `supabase ${r.status}` };
-    // A paused project answers on a different host or not at all, so reaching
-    // here with a body is the thing worth confirming.
-    await r.text();
-    return { ok: true };
+    const rows = await r.json().catch(() => null);
+    if (!Array.isArray(rows) || !rows.length) {
+      return { ok: false, detail: "keepalive row missing - run migration 010" };
+    }
+    return { ok: true, lastPing: rows[0].last_ping };
   } catch (e) {
     return { ok: false, detail: "unreachable" };
   }
@@ -562,14 +579,14 @@ export default {
   // Check it is armed with: GET /keepalive?check=1
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
-      const res = await pingSupabase();
+      const res = await pingSupabase(env);
       if (!res.ok) {
         // Better to be told the alarm is broken than to find out from Supabase.
         await notifyOwner(env, `Keep-alive failed: ${res.detail}. The project may pause.`);
       }
-      if (env.KEEPALIVE_KV) {
-        await env.KEEPALIVE_KV.put("last", new Date(event.scheduledTime).toISOString());
-      }
+      // No KV binding needed: the write records its own timestamp, so the
+      // question "when did this last run" is answered by the thing it does
+      // rather than by a second system that also has to be set up.
     })());
   },
 
@@ -584,16 +601,14 @@ export default {
     // "is the trigger actually set" is a question with an answer rather than
     // something to be inferred from Supabase's warning emails.
     if (request.method === "GET" && url.pathname === "/keepalive") {
-      const res = await pingSupabase();
-      let last = null;
-      if (env.KEEPALIVE_KV) last = await env.KEEPALIVE_KV.get("last");
+      const res = await pingSupabase(env);
       return json(
         {
-          reachable: res.ok,
+          wrote: res.ok,
           detail: res.detail || null,
-          // null here means either no KV binding or the cron has never fired.
-          // If it is null a day after deploying, the trigger is not set.
-          lastScheduledRun: last,
+          // The timestamp this call just wrote. Calling by hand is itself a
+          // keep-alive, so this is never a read-only observation.
+          lastPing: res.lastPing || null,
         },
         res.ok ? 200 : 502,
         cors()
