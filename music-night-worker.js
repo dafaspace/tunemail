@@ -726,7 +726,13 @@ export default {
       const i = info.info || {};
       const healthy = i.url === WEBHOOK_URL;
       let repaired = null;
-      if (!healthy && url.searchParams.get("fix") === "1") {
+      // force=1 re-registers even when the URL already looks right. The secret
+      // is sent with setWebhook and cannot be read back from Telegram, so a
+      // stale one is invisible here: the registration looks perfectly healthy
+      // and every delivery is refused with 403 by our own code. Re-sending it
+      // is the only way to tell that hypothesis apart from the others.
+      const force = url.searchParams.get("force") === "1";
+      if ((!healthy || force) && (force || url.searchParams.get("fix") === "1")) {
         const fix = await setTelegramWebhook(env);
         repaired = fix.ok ? true : fix.detail;
       }
@@ -931,7 +937,17 @@ export default {
       }
 
       const message = update.message;
-      if (!message || !message.reply_to_message) return new Response("OK", { status: 200 });
+      if (!message) return new Response("OK", { status: 200 });
+
+      // Typing in the chat without replying to anything is the most likely way
+      // to answer feedback and have nothing happen. It used to return 200 and
+      // say nothing, so the message looked sent and simply was not.
+      if (!message.reply_to_message) {
+        if (String(message.chat?.id) === String(env.TELEGRAM_CHAT_ID)) {
+          await notifyOwner(env, "Nothing was sent: use Reply on the feedback message itself.");
+        }
+        return new Response("OK", { status: 200 });
+      }
 
       // Second gate: only the owner's own chat may answer.
       if (String(message.chat?.id) !== String(env.TELEGRAM_CHAT_ID)) {
@@ -940,7 +956,12 @@ export default {
 
       const originalText = message.reply_to_message.text || "";
       const match = originalText.match(/^`?id:([a-f0-9-]{36})/m);
-      if (!match) return new Response("OK", { status: 200 });
+      if (!match) {
+        // Replied to the wrong message - a confirmation, or one of these
+        // notices. Also silent before.
+        await notifyOwner(env, "Nothing was sent: that message carries no feedback id. Reply to the feedback itself.");
+        return new Response("OK", { status: 200 });
+      }
 
       const feedbackId = match[1];
       // Photo, voice and sticker replies carry no .text - the caption is the
