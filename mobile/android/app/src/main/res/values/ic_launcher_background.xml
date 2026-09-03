@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A colour resource, not a drawable. Capacitor ships #FFFFFF here, which puts
+     a mark drawn for a dark ground on a white card. -->
+<resources>
+    <color name="ic_launcher_background">#0d0d1a</color>
+</resources>

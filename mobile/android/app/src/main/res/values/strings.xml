@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tunemail</string>
+    <string name="title_activity_main">Tunemail</string>
+    <string name="package_name">app.tunemail.mobile</string>
+    <string name="custom_url_scheme">app.tunemail.mobile</string>
+</resources>

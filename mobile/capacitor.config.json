@@ -1,0 +1,12 @@
+{
+  "appId": "app.tunemail.mobile",
+  "appName": "Tunemail",
+  "webDir": "www",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#0d0d1a",
+      "showSpinner": false
+    }
+  }
+}

@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#0d0d1a}canvas{display:block;width:1600px;height:1600px}</style>
+<canvas id="c" width="1600" height="1600"></canvas><script>
+const img=new Image();
+img.onload=()=>{
+ const N=1600,c=document.getElementById('c'),x=c.getContext('2d',{willReadFrequently:true});
+ x.imageSmoothingQuality='high'; x.drawImage(img,0,0,N,N);
+ const d=x.getImageData(0,0,N,N),p=d.data;
+ const FIELD=[13,13,26],PAPER=[237,239,245],ACCENT=[124,58,237];
+
+ // Record geometry, measured from the traced file: centre (800,728) in this
+ // space, label outer radius ~222, disc radius ~521.
+ const CX=800, CY=728, LABEL_R=235, DISC_R=515;
+
+ for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+   const k=(j*N+i)*4;
+   const r=p[k],g=p[k+1],b=p[k+2],lum=0.2126*r+0.7152*g+0.0722*b;
+   let t=(b-g>45&&b>110&&r<200)?ACCENT:(lum>150?PAPER:FIELD);
+
+   // Dafa: the lower groove arcs read as dirt. Paint them out - dark pixels
+   // between the label and the rim, in the lower-right sector, become disc.
+   // Bounded by radius AND angle so the label ring and the upper grooves,
+   // which are the ones doing the work, are untouched.
+   if (t===FIELD) {
+     const dx=i-CX, dy=j-CY, rad=Math.hypot(dx,dy);
+     if (rad>LABEL_R && rad<DISC_R && dx>0 && dy>0) {
+       // Only where the neighbourhood is disc. The first attempt used radius
+       // and angle alone and repainted part of the envelope's fold line as
+       // well - a purple streak running down and right out of the record.
+       // A groove is surrounded by purple; a fold line is surrounded by paper.
+       let paper=0;
+       for (const [ox,oy] of [[-18,0],[18,0],[0,-18],[0,18],[-13,-13],[13,13],[-13,13],[13,-13]]) {
+         const ii=i+ox, jj=j+oy;
+         if (ii<0||jj<0||ii>=N||jj>=N) continue;
+         const kk=(jj*N+ii)*4;
+         const L2=0.2126*p[kk]+0.7152*p[kk+1]+0.0722*p[kk+2];
+         const isPurple = p[kk+2]-p[kk+1]>45 && p[kk+2]>110 && p[kk]<200;
+         if (!isPurple && L2>150) paper++;
+       }
+       if (paper===0) t=ACCENT;
+     }
+   }
+   p[k]=t[0];p[k+1]=t[1];p[k+2]=t[2];p[k+3]=255;
+ }
+ x.putImageData(d,0,0);
+ document.title='done';
+};
+img.src='draft2.jpg';
+</script>
