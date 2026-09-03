@@ -1,42 +1,63 @@
-<!-- Tunemail mark: the family envelope, with a record where Cinemail has a reel.
+<!-- Tunemail mark: the family envelope with a record where Cinemail has a reel.
 
-     Built to the rules Cinemail's icon brief sets out and both sibling sessions
-     confirmed by measuring:
-       - flat fills, hard edges, no shadow, no gradient, no blur. The system
-         lights the icon; anything baked in fights it, and soft edges make the
-         artwork impossible to separate into layers afterwards.
-       - no pre-rounded corners and no baked frame. Masking is the system's job.
-       - cropped tight to its own ink. The viewBox below IS the ink box, so the
-         safe-zone fractions measure the mark rather than padding around it.
-         The first draft had 4 units of margin baked in on every side and every
-         fraction computed from it was quietly wrong.
+     Redrawn as vector from Dafa's generated draft. The draft set the
+     composition and could not be the artwork: measured, it carried a background
+     of #16141f instead of our #0d0d1a, bottom corners 13 per channel darker
+     than the mid-edge - a rounded card baked in, which the family rules forbid
+     because masking is the system's job - and 678 distinct colours in 5-bit
+     buckets, from a soft shadow under the record and a gradient across the
+     flap. Flat artwork is what makes the layers separable later; a shaded
+     raster cannot be taken apart.
 
-     Colour is the only thing separating the siblings: Cinemail's accent is gold
-     #f5c518, ours is #7c3aed. The envelope keeps Cinemail's off-white so the two
-     read as one family at a glance.
+     Proportions taken from the draft by measurement, after a first attempt eyed
+     them and got a small badge on a heavy dark chevron:
 
-     Ink box 112 x 102, aspect 1.098:1. By the diagonal rule - the ink diagonal
-     must fit a circle of 66 in a 108 canvas - that allows 0.452 x 0.412 of an
-     Android adaptive foreground. A square would be capped at 0.432, and
-     "TUNEMAIL" set on one line at roughly 0.10, which is a 5dp smudge in the
-     launcher. That is why the icon is a picture and the word lives in the
-     lockup. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 112 102" width="112" height="102">
-  <!-- Record, behind everything, drawn first. About 80% of the disc stays
-       visible above the envelope: at less it stops reading as a record and
-       becomes a purple bump. -->
-  <circle cx="60" cy="36" r="32" fill="#7c3aed"/>
-  <!-- Label in the envelope's own off-white rather than a third colour. Three
-       colours read as noise at 48dp. -->
-  <circle cx="60" cy="36" r="10.5" fill="#eef0f6"/>
-  <!-- Spindle hole punched to the background instead of filled, so it survives
-       being 32px wide. -->
-  <circle cx="60" cy="36" r="3.4" fill="#0d0d1a"/>
+       record diameter : envelope width   0.72   (was 0.60)
+       flap apex, down the envelope       0.71   (was 0.85, which is what made
+                                                  the V read as a chevron)
+       back-wall band : envelope height   0.21   (was 0.25, then 0.13, which
+                                                  a 6-unit outline on a 12-unit
+                                                  band ate almost entirely -
+                                                  the pale wall read as a dark
+                                                  line)
+       label : record diameter            0.24   (was 0.40)
 
-  <!-- Envelope back wall, visible as a thin band either side of the front. -->
-  <path d="M4 56 L116 56 L116 106 L4 106 Z" fill="#dfe3ec"/>
+     Everything is a solid fill or a hard-edged stroke. No gradient, no shadow,
+     no blur, no pre-rounded corner, no frame.
 
-  <!-- Front panel: the flap folded up, seen head on. A shade lighter, so the
-       fold reads without a stroke or a shadow. -->
-  <path d="M4 106 L4 64 L60 98 L116 64 L116 106 Z" fill="#eef0f6"/>
+     Outlines are #0d0d1a, the same value as the page behind, so the mark reads
+     as cut out of the background rather than drawn on it. Stroke weight and the
+     exact envelope geometry are pending numbers from the Cinemail session -
+     that is the one part of this file expected to change, and it is what makes
+     the two siblings identical by construction rather than by eye. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 24 172 146" width="172" height="146">
+  <g stroke="#0d0d1a" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+
+    <!-- Record, behind the envelope. The envelope's opaque fills cover its
+         lower edge, so no clip path is needed. -->
+    <circle cx="100" cy="86" r="62" fill="#7c3aed"/>
+
+    <!-- Grooves on the upper left only, as in the draft. A full set of
+         concentric rings turns to mush below 48px and one quadrant is enough to
+         say "record". Thin and separately stroked so they stay hairlines
+         instead of growing with the outline weight. -->
+    <g fill="none" stroke="#0d0d1a" stroke-width="2.6" stroke-linecap="round">
+      <path d="M54 70 A52 52 0 0 1 84 26"/>
+      <path d="M58 80 A45 45 0 0 1 84 42"/>
+      <path d="M63 90 A38 38 0 0 1 85 57"/>
+    </g>
+
+    <!-- Label: an off-white ring, a purple centre and a punched spindle. Two
+         colours plus the outline - a third reads as noise at 48px. -->
+    <circle cx="100" cy="86" r="15" fill="#eef0f6"/>
+    <circle cx="100" cy="86" r="8.5" fill="#7c3aed" stroke-width="3.4"/>
+    <circle cx="100" cy="86" r="2.8" fill="#0d0d1a" stroke="none"/>
+
+    <!-- Envelope back wall: the band showing above the front panel that gives
+         the envelope its thickness. -->
+    <path d="M14 76 L14 56 L100 123 L186 56 L186 76 L100 143 Z" fill="#dfe3ec"/>
+
+    <!-- Front panel. Its top edge is the V the record sits behind. -->
+    <path d="M14 76 L100 143 L186 76 L186 170 L14 170 Z" fill="#eef0f6"/>
+  </g>
 </svg>

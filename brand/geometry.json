@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Recomputed whenever mark.svg changes. Carrying old numbers over is how a",
+    "clipped icon ships: every fraction here is derived from the ink box, and the",
+    "ink box changes the moment the drawing does.",
+    "The binding constraint is the envelope's bottom corners - the top corners",
+    "carry no ink, because the record is a centred circle."
+  ],
+  "inkBox": { "width": 172, "height": 146, "aspect": 1.178 },
+  "adaptiveSafeCircle": { "diameterOfCanvas": 0.6111, "source": "66 of 108" },
+  "maxWidthOfCanvas": 0.4659,
+  "shipAt": 0.452,
+  "marginPercent": 3,
+  "nonCroppingFraction": 0.66,
+  "maskableFraction": 0.54,
+  "colours": {
+    "background": "#0d0d1a",
+    "outline": "#0d0d1a",
+    "accent": "#7c3aed",
+    "envelopeFront": "#eef0f6",
+    "envelopeBack": "#dfe3ec"
+  },
+  "pending": [
+    "Exact stroke weight as a fraction of the ink box, from Cinemail",
+    "Exact envelope geometry from Cinemail: flap apex, edge angle, front panel",
+    "ratio, whether the back wall shows on both sides. Drawn by eye until then,",
+    "which is the difference between siblings and cousins."
+  ]
+}
