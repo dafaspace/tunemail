@@ -523,6 +523,84 @@ ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_nam
   });
 }
 
+// ── Telegram webhook: check it, and put it back ─────────────────────────────
+// Feedback replies stopped arriving. Cloudflare's log shows POST
+// /telegram-webhook on 27 August and nothing since, so the code that handles a
+// reply was never reached - Telegram had stopped delivering.
+//
+// A webhook registration is a piece of state living on Telegram's servers,
+// which nothing in this repo deploys and nothing here can see. It can be
+// cleared by deleting and recreating the bot, by another setWebhook call, or by
+// Telegram itself after enough consecutive failures. Whatever removed it, the
+// symptom is silence, and silence looks exactly like "nobody replied".
+//
+// So the cron checks it. Registration is idempotent, the check costs one API
+// call every ten minutes, and the worst case is that the webhook can now only
+// be missing for ten minutes rather than for a week nobody noticed.
+const WEBHOOK_URL = "https://music-night-worker.dafa4me.workers.dev/telegram-webhook";
+
+async function telegramWebhookInfo(env) {
+  if (!env.TELEGRAM_TOKEN) return { ok: false, detail: "no bot token" };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/getWebhookInfo`);
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) return { ok: false, detail: j?.description || `telegram ${r.status}` };
+    return { ok: true, info: j.result };
+  } catch {
+    return { ok: false, detail: "unreachable" };
+  }
+}
+
+async function setTelegramWebhook(env) {
+  if (!env.TELEGRAM_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) {
+    return { ok: false, detail: "not configured" };
+  }
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: WEBHOOK_URL,
+        secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+        // Only what this bot actually acts on. Asking for everything means
+        // Telegram queues updates nobody reads.
+        allowed_updates: ["message"],
+      }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) return { ok: false, detail: j?.description || `telegram ${r.status}` };
+    return { ok: true };
+  } catch {
+    return { ok: false, detail: "unreachable" };
+  }
+}
+
+// Returns what it found and whether it had to act, so the caller can report it.
+async function ensureTelegramWebhook(env) {
+  const cur = await telegramWebhookInfo(env);
+  if (!cur.ok) return { checked: false, detail: cur.detail };
+
+  const url = cur.info?.url || "";
+  const healthy = url === WEBHOOK_URL;
+  if (healthy) {
+    return {
+      checked: true,
+      repaired: false,
+      pending: cur.info?.pending_update_count ?? 0,
+      lastError: cur.info?.last_error_message || null,
+    };
+  }
+
+  const fix = await setTelegramWebhook(env);
+  return {
+    checked: true,
+    repaired: fix.ok,
+    was: url || "(none)",
+    detail: fix.detail || null,
+  };
+}
+
+
 // A WRITE, not a read.
 //
 // The previous version read one row and the project was threatened with a
@@ -615,6 +693,16 @@ export default {
       // No KV binding needed: the write records its own timestamp, so the
       // question "when did this last run" is answered by the thing it does
       // rather than by a second system that also has to be set up.
+
+      // And while we are here anyway, make sure Telegram still knows where to
+      // deliver. Only says anything when it had to act - a message every ten
+      // minutes saying "still fine" is a message nobody reads.
+      const tg = await ensureTelegramWebhook(env);
+      if (tg.repaired) {
+        await notifyOwner(env, `Telegram webhook was missing (was: ${tg.was}) and has been re-registered.`);
+      } else if (tg.checked === false) {
+        await notifyOwner(env, `Could not check the Telegram webhook: ${tg.detail}`);
+      }
     })());
   },
 
@@ -628,6 +716,40 @@ export default {
     // GET /keepalive - the same ping the cron does, callable by hand, so
     // "is the trigger actually set" is a question with an answer rather than
     // something to be inferred from Supabase's warning emails.
+    // GET /telegram-status - what Telegram thinks the webhook is, and a repair
+    // if it disagrees. No token passes through the caller's hands; the worker
+    // already holds it. Nothing secret is returned: the URL is our own, and the
+    // rest is delivery health.
+    if (request.method === "GET" && url.pathname === "/telegram-status") {
+      const info = await telegramWebhookInfo(env);
+      if (!info.ok) return json({ error: info.detail }, 502, cors());
+      const i = info.info || {};
+      const healthy = i.url === WEBHOOK_URL;
+      let repaired = null;
+      if (!healthy && url.searchParams.get("fix") === "1") {
+        const fix = await setTelegramWebhook(env);
+        repaired = fix.ok ? true : fix.detail;
+      }
+      return json(
+        {
+          registered: !!i.url,
+          pointsHere: healthy,
+          url: i.url || null,
+          pendingUpdates: i.pending_update_count ?? 0,
+          // The reason Telegram gives up, when it does. A run of these is what
+          // turns a working webhook into a missing one.
+          lastError: i.last_error_message || null,
+          lastErrorAt: i.last_error_date
+            ? new Date(i.last_error_date * 1000).toISOString()
+            : null,
+          hasSecret: !!i.has_custom_certificate || undefined,
+          repaired,
+        },
+        200,
+        cors()
+      );
+    }
+
     if (request.method === "GET" && url.pathname === "/keepalive") {
       const res = await pingSupabase(env, { reportPrevious: true });
       const prev = res.previous;
