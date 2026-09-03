@@ -1,0 +1,77 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}canvas{display:block;width:1600px;height:1600px}</style>
+<canvas id="c" width="1600" height="1600"></canvas><script>
+const img=new Image();
+img.onload=()=>{
+ const N=1600,c=document.getElementById('c'),x=c.getContext('2d',{willReadFrequently:true});
+ x.imageSmoothingQuality='high'; x.drawImage(img,0,0,N,N);
+ const src=x.getImageData(0,0,N,N).data;
+ const FIELD=[13,13,26],PAPER=[237,239,245],ACCENT=[124,58,237];
+ const CX=800, CY=728, LABEL_R=235, DISC_R=515;
+
+ // Pass 1 - classify, and paint out the lower groove arcs.
+ const cls=new Uint8Array(N*N); // 0 field, 1 paper, 2 accent
+ for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+   const k=(j*N+i)*4, r=src[k],g=src[k+1],b=src[k+2];
+   const lum=0.2126*r+0.7152*g+0.0722*b;
+   let t = (b-g>45&&b>110&&r<200)?2:(lum>150?1:0);
+   if(t===0){
+     const dx=i-CX, dy=j-CY, rad=Math.hypot(dx,dy);
+     if(rad>LABEL_R&&rad<DISC_R&&dx>0&&dy>0){
+       let paper=0;
+       for(const [ox,oy] of [[-18,0],[18,0],[0,-18],[0,18],[-13,-13],[13,13],[-13,13],[13,-13]]){
+         const ii=i+ox,jj=j+oy; if(ii<0||jj<0||ii>=N||jj>=N) continue;
+         const kk=(jj*N+ii)*4, L2=0.2126*src[kk]+0.7152*src[kk+1]+0.0722*src[kk+2];
+         const purple=src[kk+2]-src[kk+1]>45&&src[kk+2]>110&&src[kk]<200;
+         if(!purple&&L2>150) paper++;
+       }
+       if(paper===0) t=2;
+     }
+   }
+   cls[j*N+i]=t;
+ }
+
+ // Pass 2 - which field pixels are OUTSIDE the mark. Flood from the border
+ // through field only; whatever it cannot reach is an internal line, and an
+ // internal line is ink, not a hole for the background to shine through.
+ const outside=new Uint8Array(N*N);
+ const stack=[];
+ for(let i=0;i<N;i++){ stack.push(i, (N-1)*N+i, i*N, i*N+N-1); }
+ while(stack.length){
+   const p=stack.pop();
+   if(outside[p]||cls[p]!==0) continue;
+   outside[p]=1;
+   const i=p%N, j=(p-i)/N;
+   if(i>0)stack.push(p-1); if(i<N-1)stack.push(p+1);
+   if(j>0)stack.push(p-N); if(j<N-1)stack.push(p+N);
+ }
+
+ // Pass 3 - dilate the mark body to make an even outer ring. Raster morphology
+ // gives a uniform ring; stroking a traced curve amplifies its wobble, which is
+ // what made the previous attempt look ragged.
+ const R=17;
+ const body=new Uint8Array(N*N);
+ for(let p=0;p<N*N;p++) body[p]= (cls[p]!==0 || (cls[p]===0 && !outside[p])) ?1:0;
+ const dil=new Uint8Array(N*N);
+ // separable: horizontal then vertical max
+ const tmp=new Uint8Array(N*N);
+ for(let j=0;j<N;j++){ for(let i=0;i<N;i++){ let v=0;
+   for(let o=-R;o<=R;o++){ const ii=i+o; if(ii>=0&&ii<N&&body[j*N+ii]){v=1;break;} }
+   tmp[j*N+i]=v; } }
+ for(let i=0;i<N;i++){ for(let j=0;j<N;j++){ let v=0;
+   for(let o=-R;o<=R;o++){ const jj=j+o; if(jj>=0&&jj<N&&tmp[jj*N+i]){v=1;break;} }
+   dil[j*N+i]=v; } }
+
+ const out=x.createImageData(N,N), o=out.data;
+ for(let p=0;p<N*N;p++){
+   const k=p*4; let col=null;
+   if(cls[p]===1) col=PAPER;
+   else if(cls[p]===2) col=ACCENT;
+   else if(!outside[p]) col=FIELD;     // internal lines: real ink
+   else if(dil[p]) col=FIELD;          // the outer ring
+   if(col){ o[k]=col[0];o[k+1]=col[1];o[k+2]=col[2];o[k+3]=255; }
+ }
+ x.putImageData(out,0,0);
+ document.title='done';
+};
+img.src='draft2.jpg';
+</script>
