@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><title>Tunemail lockup</title>
+<style>
+ @font-face{font-family:Bebas;src:url(bebas-neue-latin.woff2) format('woff2');font-display:block}
+ body{margin:0;background:#191922;color:#9a9aa6;font:12px -apple-system,sans-serif;padding:24px}
+ h2{font:600 10px -apple-system;letter-spacing:.14em;text-transform:uppercase;color:#6a6a78;margin:0 0 12px}
+ .row{display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-bottom:26px}
+ .c{text-align:center}.l{margin-top:8px;font-size:10px}
+ .lock{display:inline-flex;align-items:center;gap:16px;background:#0d0d1a;padding:26px 32px;border-radius:16px}
+ .word{font-family:Bebas,sans-serif;line-height:.82;letter-spacing:.02em;color:#f0f0f0;font-size:52px}
+ .word b{color:#7c3aed;font-weight:inherit}
+ .lock.m{gap:11px;padding:16px 20px}.lock.m .word{font-size:30px}
+ .lock.s{gap:8px;padding:11px 14px}.lock.s .word{font-size:20px}
+ .stack{display:inline-flex;flex-direction:column;align-items:center;gap:14px;background:#0d0d1a;padding:30px 36px;border-radius:16px}
+ .stack .word{font-size:40px}
+ .light{background:#eef0f6}.light .word{color:#0d0d1a}
+ img{display:block}
+</style>
+<h2>horizontal &mdash; store header, sign-in, the share page</h2>
+<div class="row">
+  <div class="c"><div class="lock"><img src="mark-fg.svg" style="height:56px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="l">large</div></div>
+  <div class="c"><div class="lock m"><img src="mark-fg.svg" style="height:32px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="l">medium</div></div>
+  <div class="c"><div class="lock s"><img src="mark-fg.svg" style="height:22px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="l">small</div></div>
+</div>
+<h2>stacked, and on a light ground</h2>
+<div class="row">
+  <div class="c"><div class="stack"><img src="mark-fg.svg" style="height:68px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="l">stacked</div></div>
+  <div class="c"><div class="lock light"><img src="mark-fg.svg" style="height:56px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="l">on light - outlines are #0d0d1a so it survives</div></div>
+</div>

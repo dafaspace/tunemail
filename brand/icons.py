@@ -39,7 +39,7 @@ made.append(shot('pwa/apple-touch-icon.png', 180, 0.66, FIELD))
 made.append(shot('store/icon-1024.png', 1024, 0.66, FIELD))
 
 # ---- Android adaptive ---------------------------------------------------
-DENS = {'mdpi':1,'hdpi':1.5,'xhdpi':2,'xxhdpi':3,'xxxhdpi':4}
+DENS = {'ldpi':0.75,'mdpi':1,'hdpi':1.5,'xhdpi':2,'xxhdpi':3,'xxxhdpi':4}
 for d, m in DENS.items():
     fg = round(108*m); lg = round(48*m)
     made.append(shot(f'android/mipmap-{d}/ic_launcher_foreground.png', fg, 0.419))
