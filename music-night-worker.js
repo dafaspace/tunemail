@@ -571,7 +571,14 @@ async function pingSupabase(env, opts = {}) {
         // PostgREST answers 204 either way, which reads as success.
         Prefer: "return=representation",
       },
-      body: JSON.stringify({ last_ping: new Date().toISOString(), source: "cron" }),
+      // The caller says who it is. This stamped "cron" unconditionally, so a
+      // manual check wrote a row indistinguishable from a scheduled one - and
+      // then the next manual check read that row back and reported the cron as
+      // alive. The field built to tell the two apart was recording neither.
+      body: JSON.stringify({
+        last_ping: new Date().toISOString(),
+        source: opts.source || "manual",
+      }),
     });
     if (!r.ok) return { ok: false, detail: `supabase ${r.status}` };
     const rows = await r.json().catch(() => null);
@@ -600,7 +607,7 @@ export default {
   // Check it is armed with: GET /keepalive?check=1
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
-      const res = await pingSupabase(env);
+      const res = await pingSupabase(env, { source: "cron" });
       if (!res.ok) {
         // Better to be told the alarm is broken than to find out from Supabase.
         await notifyOwner(env, `Keep-alive failed: ${res.detail}. The project may pause.`);
