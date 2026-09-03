@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>white MAIL on light</title>
+<style>
+ @font-face{font-family:Bebas;src:url(bebas-neue-latin.woff2) format('woff2');font-display:block}
+ body{margin:0;background:#eef0f6;color:#5a5a68;font:12px -apple-system,sans-serif;padding:24px}
+ h2{font:600 10px -apple-system;letter-spacing:.13em;text-transform:uppercase;color:#8a8a98;margin:0 0 10px}
+ .row{display:flex;gap:30px;align-items:center;flex-wrap:wrap;margin-bottom:26px}
+ .c{text-align:center}.l{margin-top:8px;font-size:10px}
+ .lock{display:inline-flex;align-items:center;gap:15px}
+ .w{font-family:Bebas,sans-serif;line-height:.82;letter-spacing:.02em;font-size:46px}
+ img{height:64px;display:block}
+ /* MAIL in white with a thin dark outline, exactly as the envelope has one. */
+ .out{color:#eef0f6;-webkit-text-stroke:1.6px #0d0d1a;paint-order:stroke fill}
+ .out2{color:#eef0f6;-webkit-text-stroke:2.6px #0d0d1a;paint-order:stroke fill}
+ .dark{color:#0d0d1a}
+ .p{color:#7c3aed}
+</style>
+<h2>MAIL white with a thin outline, envelope as it already is</h2>
+<div class="row">
+  <div class="c"><div class="lock"><img src="mark-fg.svg"><span class="w"><span class="p">TUNE</span><span class="out">MAIL</span></span></div><div class="l">stroke 1.6px</div></div>
+  <div class="c"><div class="lock"><img src="mark-fg.svg"><span class="w"><span class="p">TUNE</span><span class="out2">MAIL</span></span></div><div class="l">stroke 2.6px</div></div>
+</div>
+<h2>for comparison: MAIL dark</h2>
+<div class="row">
+  <div class="c"><div class="lock"><img src="mark-fg.svg"><span class="w"><span class="p">TUNE</span><span class="dark">MAIL</span></span></div><div class="l">dark</div></div>
+</div>
+<h2>small, where an outline on letters usually dies</h2>
+<div class="row" style="align-items:flex-end">
+  <div class="c"><span class="w out" style="font-size:26px"><span class="p" style="-webkit-text-stroke:0">TUNE</span>MAIL</span><div class="l">26px</div></div>
+  <div class="c"><span class="w out" style="font-size:18px"><span class="p" style="-webkit-text-stroke:0">TUNE</span>MAIL</span><div class="l">18px</div></div>
+  <div class="c"><span class="w out" style="font-size:13px"><span class="p" style="-webkit-text-stroke:0">TUNE</span>MAIL</span><div class="l">13px</div></div>
+</div>
