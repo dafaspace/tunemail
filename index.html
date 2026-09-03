@@ -1837,7 +1837,7 @@ button {
           <div class="public-footer-hint">developed by dafaspace · tunemail</div>
         </div>
         <div class="public-footer-join">
-          <p>Make your own playlist — share anywhere</p>
+          <p>Make your own playlist, share anywhere</p>
           <div class="public-footer-join-btns">
             <button class="btn btn-primary btn-sm" id="btn-profile-create">Get Started</button>
             <button class="btn btn-ghost btn-sm" id="link-profile-signin">Sign In</button>
@@ -1939,7 +1939,7 @@ button {
           <label>Add to Playlist</label>
           <div style="display:flex;gap:8px">
             <select id="search-playlist-select" style="flex:1">
-              <option value="">— Select playlist —</option>
+              <option value="">Select a playlist</option>
             </select>
             <button class="btn btn-secondary btn-sm" id="btn-new-playlist-inline" style="white-space:nowrap">+ New</button>
           </div>
@@ -2036,7 +2036,7 @@ button {
           </label>
         </div>
         <div class="divider"></div>
-        <div style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px">Streaming Links <span style="font-family:DM Sans;font-size:11px;letter-spacing:0;text-transform:none">(optional — adds an embedded player)</span></div>
+        <div style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px">Streaming Links <span style="font-family:DM Sans;font-size:11px;letter-spacing:0;text-transform:none">(optional, adds an embedded player)</span></div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:6px"><span style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:4px"><svg width="13" height="13" viewBox="0 0 168 168"><circle cx="84" cy="84" r="84" fill="#1DB954"/><path d="M120.7 116.4c-1.6 2.7-5.1 3.5-7.7 1.9-21.2-13-47.9-15.9-79.3-8.7-3 .7-6.1-1.2-6.8-4.2-.7-3 1.2-6.1 4.2-6.8 34.4-7.9 64-4.5 87.8 10.1 2.7 1.6 3.5 5.1 1.9 7.7zm10.2-22.8c-2 3.4-6.4 4.5-9.8 2.5-24.3-14.9-61.3-19.3-90-10.5-3.7 1.1-7.6-1-8.7-4.7-1.1-3.7 1-7.6 4.7-8.7 32.8-10 73.5-5.1 101.3 12 3.4 2 4.5 6.4 2.5 9.8zm.9-23.8c-29.1-17.3-77.2-18.9-105-10.5-4.5 1.4-9.2-1.2-10.5-5.6-1.4-4.5 1.2-9.2 5.6-10.5 31.9-9.7 84.9-7.8 118.4 12.1 4 2.4 5.4 7.6 3 11.6-2.4 4.1-7.6 5.4-11.6 3z" fill="white"/></svg></span> Spotify URL</label>
           <input type="url" id="playlist-spotify-url" placeholder="https://open.spotify.com/playlist/..." />
@@ -2122,7 +2122,7 @@ button {
             <div style="font-family:var(--font-display);font-size:18px;letter-spacing:1px;margin-bottom:8px">Connect Spotify</div>
             <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px">
               Sign in with Spotify to import your playlists.<br/>
-              We only read your playlists — we never modify them.
+              We only read your playlists and never modify them.
             </p>
             <button class="btn btn-primary" id="btn-spotify-connect" style="width:200px">Connect Spotify</button>
           </div>
@@ -2182,7 +2182,7 @@ button {
         <div id="import-panel-text" style="display:none">
           <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);font-family:monospace;margin-bottom:12px;line-height:1.8">
             Artist - Track Name<br/>
-            Artist — Track Name<br/>
+            Artist - Track Name<br/>
             Artist: Track Name
           </div>
           <div class="form-group">
@@ -2697,7 +2697,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v63';
+const APP_BUILD = 'v64';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3434,7 +3434,7 @@ document.getElementById('btn-share-track').addEventListener('click', async () =>
   try {
     // Save as a single-track public playlist with auto-slug
     const slug = generateSlug();
-    const name = `${artist} — ${track}`;
+    const name = `${artist} - ${track}`;
     const { data: pl, error: plErr } = await sbClient
       .from('music_playlists')
       .insert({ user_id: currentUser.id, name, is_public: true, public_slug: slug })
@@ -3736,7 +3736,7 @@ document.querySelectorAll('.sort-pill').forEach(btn => {
 // ── Playlists: update select in search tab ────────────────────────────
 function updatePlaylistSelect() {
   const sel = document.getElementById('search-playlist-select');
-  sel.innerHTML = '<option value="">— Select playlist —</option>' +
+  sel.innerHTML = '<option value="">Select a playlist</option>' +
     playlists.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
 }
 
@@ -4540,7 +4540,7 @@ document.getElementById('btn-audd').addEventListener('click', async () => {
           }
           const failPhrases = [
             "I'm dancing too hard to hear! Again?",
-            "Too much noise — try again?",
+            "Too much noise, try again?",
             "Let's try again, shall we?",
             "I'm lost in the noise",
             "I missed that. Sing it louder?",
@@ -4583,7 +4583,7 @@ document.getElementById('btn-audd').addEventListener('click', async () => {
           "Total vibe!",
           "I'm vibing to this too. Here it is!",
           "Legendary pick. It's all yours.",
-          "Stop the search — we have a winner!",
+          "Stop the search, we have a winner!",
           "Music to my ears! Found it for you",
           "Pure gold! Here's your track",
           "Boom! Found it",
@@ -4610,7 +4610,7 @@ document.getElementById('btn-audd').addEventListener('click', async () => {
     auddRecording = false;
     btn.classList.remove('recording');
     if (e.name === 'NotAllowedError') {
-      auddStatus('Mic access denied — check browser settings');
+      auddStatus('Mic access denied, check browser settings');
     } else {
       auddStatus('Something went wrong, try again');
     }
@@ -5227,7 +5227,7 @@ async function importSpotifyPlaylist(spotifyId, name, total) {
     }
 
     closeModal('overlay-spotify');
-    showToast(`"${name}" imported — ${rows.length} tracks`);
+    showToast(`"${name}" imported, ${rows.length} tracks`);
     await loadPlaylists();
   } catch (err) {
     showToast('Import failed: ' + err.message);
@@ -5659,7 +5659,7 @@ async function loadPublicPlaylist(slug) {
     }
 
     // Set page title
-    document.title = `${pl.name} — Tunemail`;
+    document.title = `${pl.name} - Tunemail`;
 
     // Show embed players
     const embedDiv = document.getElementById('public-spotify-embed');
@@ -6141,7 +6141,7 @@ async function loadUserProfile(username) {
 
     const displayName = profile.display_name || profile.username;
     document.getElementById('profile-name').textContent = displayName;
-    document.title = `${displayName} — Tunemail`;
+    document.title = `${displayName} - Tunemail`;
 
     // Load public playlists
     const { data: playlists } = await sbClient
