@@ -761,6 +761,24 @@ button {
     .btn-danger:disabled { opacity: .4; cursor: default; }
     .btn-danger:not(:disabled):hover { background: #9b201a; }
 
+    /* The CSV route is now the way a stranger moves a playlist in, so it gets
+       real instructions rather than one line of small print. */
+    .csv-guide {
+      background: var(--primary-soft); border: 1px solid var(--primary-border);
+      border-radius: 8px; padding: 14px; margin-bottom: 14px;
+    }
+    .csv-guide-title {
+      font-family: var(--font-text); font-weight: 600; font-size: 12.5px;
+      letter-spacing: .05em; color: #a78bfa; margin-bottom: 8px;
+    }
+    .csv-steps { margin: 0 0 10px; padding-left: 18px; }
+    .csv-steps li {
+      font-size: 12.5px; color: var(--muted-strong); line-height: 1.65;
+      margin-bottom: 3px;
+    }
+    .csv-steps a { color: #b69bff; }
+    .csv-note { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0; }
+
     .fb-del {
       display: inline-flex; align-items: center; justify-content: center;
       min-width: 44px; min-height: 44px; margin: -12px -12px -12px 0;
@@ -2163,12 +2181,20 @@ button {
 
         <!-- CSV tab -->
         <div id="import-panel-csv">
-          <div style="background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:8px;padding:12px;margin-bottom:14px">
-            <div style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:#a78bfa;margin-bottom:4px">Exportify CSV</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6">
-              Go to <strong style="color:var(--text)">exportify.app</strong> → connect Spotify → export playlist as CSV → upload here.<br/>
-              Artist, track name, album, duration and Spotify URI are all imported automatically.
-            </div>
+          <div class="csv-guide">
+            <div class="csv-guide-title">Bringing a playlist over from Spotify</div>
+            <ol class="csv-steps">
+              <li>Open <a href="https://www.spotlistr.com/convert/spotify-to-export" target="_blank" rel="noopener">spotlistr.com</a>
+                  or <a href="https://exportify.net" target="_blank" rel="noopener">exportify.net</a> and sign in with Spotify.</li>
+              <li>Pick the playlist and download it as CSV.</li>
+              <li>Drop that file below.</li>
+            </ol>
+            <p class="csv-note">
+              Spotlistr includes an ISRC column. If yours has one, every track
+              gets an exact link to the right recording rather than a search.
+              Artist, title, album, duration and release date are read from any
+              exporter.
+            </p>
           </div>
           <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:10px;padding:28px 16px;cursor:pointer;transition:border-color 0.15s" id="csv-drop-zone">
             <span style="font-size:28px"><svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg></span>
@@ -2697,7 +2723,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v64';
+const APP_BUILD = 'v65';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5335,6 +5361,10 @@ function parseCSV(text) {
     duration:    findCol(header, ['duration (ms)','duration_ms','duration']),
     spotifyUri:  findCol(header, ['spotify uri','spotify_uri','uri']),
     releaseDate: findCol(header, ['release date','release_date']),
+    // Spotlistr exports this and it is the single most valuable column in the
+    // file: an ISRC gives an exact link on every platform straight away,
+    // instead of the app having to guess the recording from its name later.
+    isrc:        findCol(header, ['isrc']),
   };
 
   const tracks = [];
@@ -5350,6 +5380,10 @@ function parseCSV(text) {
       duration_ms:  colIdx.duration    >= 0 ? parseInt(cols[colIdx.duration] || 0) || null : null,
       spotify_uri:  colIdx.spotifyUri  >= 0 ? (cols[colIdx.spotifyUri]  || '').trim() : '',
       release_date: colIdx.releaseDate >= 0 ? (cols[colIdx.releaseDate] || '').trim() : '',
+      // Normalised: exporters vary on case and some pad with spaces or dashes.
+      isrc: colIdx.isrc >= 0
+        ? ((cols[colIdx.isrc] || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || null)
+        : null,
     });
   }
   return tracks;
