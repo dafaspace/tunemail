@@ -537,8 +537,29 @@ ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_nam
 //
 // It needs the service key: the table has RLS on and no policies, because
 // nothing else has any business touching it.
-async function pingSupabase(env) {
+async function pingSupabase(env, opts = {}) {
   if (!env.SUPABASE_KEY) return { ok: false, detail: "no service key" };
+
+  // Read the existing value before overwriting it. Checking by hand used to
+  // destroy the very evidence it was checking: the call writes, so lastPing
+  // always came back as the timestamp of the call itself, and "did the cron
+  // run" was unanswerable from the one endpoint built to answer it.
+  let previous = null;
+  if (opts.reportPrevious) {
+    try {
+      const g = await fetch(`${SUPABASE_URL}/rest/v1/keepalive?id=eq.1&select=last_ping,source`, {
+        headers: {
+          apikey: env.SUPABASE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_KEY}`,
+        },
+      });
+      if (g.ok) {
+        const rows = await g.json().catch(() => null);
+        if (Array.isArray(rows) && rows.length) previous = rows[0];
+      }
+    } catch { /* the write below is what matters; this is only for the report */ }
+  }
+
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/keepalive?id=eq.1`, {
       method: "PATCH",
@@ -557,7 +578,7 @@ async function pingSupabase(env) {
     if (!Array.isArray(rows) || !rows.length) {
       return { ok: false, detail: "keepalive row missing - run migration 010" };
     }
-    return { ok: true, lastPing: rows[0].last_ping };
+    return { ok: true, lastPing: rows[0].last_ping, previous };
   } catch (e) {
     return { ok: false, detail: "unreachable" };
   }
@@ -601,14 +622,27 @@ export default {
     // "is the trigger actually set" is a question with an answer rather than
     // something to be inferred from Supabase's warning emails.
     if (request.method === "GET" && url.pathname === "/keepalive") {
-      const res = await pingSupabase(env);
+      const res = await pingSupabase(env, { reportPrevious: true });
+      const prev = res.previous;
+      const ageSec = prev?.last_ping
+        ? Math.round((Date.now() - new Date(prev.last_ping).getTime()) / 1000)
+        : null;
       return json(
         {
           wrote: res.ok,
           detail: res.detail || null,
-          // The timestamp this call just wrote. Calling by hand is itself a
-          // keep-alive, so this is never a read-only observation.
+          // What this call just wrote. Calling by hand is itself a keep-alive.
           lastPing: res.lastPing || null,
+          // What was there BEFORE this call, which is the part that answers
+          // whether anything other than you is writing.
+          previousPing: prev?.last_ping || null,
+          previousSource: prev?.source || null,
+          previousAgeSeconds: ageSec,
+          // With a 10-minute schedule, a previous write by "cron" less than
+          // ~700s old means the schedule is running. Said in words so the
+          // answer does not depend on doing the arithmetic.
+          cronLooksAlive:
+            prev?.source === "cron" && ageSec !== null && ageSec < 700,
         },
         res.ok ? 200 : 502,
         cors()
