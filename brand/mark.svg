@@ -1,0 +1,42 @@
+<!-- Tunemail mark: the family envelope, with a record where Cinemail has a reel.
+
+     Built to the rules Cinemail's icon brief sets out and both sibling sessions
+     confirmed by measuring:
+       - flat fills, hard edges, no shadow, no gradient, no blur. The system
+         lights the icon; anything baked in fights it, and soft edges make the
+         artwork impossible to separate into layers afterwards.
+       - no pre-rounded corners and no baked frame. Masking is the system's job.
+       - cropped tight to its own ink. The viewBox below IS the ink box, so the
+         safe-zone fractions measure the mark rather than padding around it.
+         The first draft had 4 units of margin baked in on every side and every
+         fraction computed from it was quietly wrong.
+
+     Colour is the only thing separating the siblings: Cinemail's accent is gold
+     #f5c518, ours is #7c3aed. The envelope keeps Cinemail's off-white so the two
+     read as one family at a glance.
+
+     Ink box 112 x 102, aspect 1.098:1. By the diagonal rule - the ink diagonal
+     must fit a circle of 66 in a 108 canvas - that allows 0.452 x 0.412 of an
+     Android adaptive foreground. A square would be capped at 0.432, and
+     "TUNEMAIL" set on one line at roughly 0.10, which is a 5dp smudge in the
+     launcher. That is why the icon is a picture and the word lives in the
+     lockup. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 112 102" width="112" height="102">
+  <!-- Record, behind everything, drawn first. About 80% of the disc stays
+       visible above the envelope: at less it stops reading as a record and
+       becomes a purple bump. -->
+  <circle cx="60" cy="36" r="32" fill="#7c3aed"/>
+  <!-- Label in the envelope's own off-white rather than a third colour. Three
+       colours read as noise at 48dp. -->
+  <circle cx="60" cy="36" r="10.5" fill="#eef0f6"/>
+  <!-- Spindle hole punched to the background instead of filled, so it survives
+       being 32px wide. -->
+  <circle cx="60" cy="36" r="3.4" fill="#0d0d1a"/>
+
+  <!-- Envelope back wall, visible as a thin band either side of the front. -->
+  <path d="M4 56 L116 56 L116 106 L4 106 Z" fill="#dfe3ec"/>
+
+  <!-- Front panel: the flap folded up, seen head on. A shade lighter, so the
+       fold reads without a stroke or a shadow. -->
+  <path d="M4 106 L4 64 L60 98 L116 64 L116 106 Z" fill="#eef0f6"/>
+</svg>

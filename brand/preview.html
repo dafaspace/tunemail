@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8">
+<style>
+ @font-face{font-family:Bebas;src:url(bebas-neue-latin.woff2) format('woff2');font-display:block}
+ body{margin:0;background:#191922;font:13px -apple-system,sans-serif;color:#9a9aa6;padding:28px}
+ h2{font:600 11px -apple-system;letter-spacing:.14em;text-transform:uppercase;color:#6a6a78;margin:0 0 14px}
+ .row{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-bottom:34px}
+ .cell{text-align:center}
+ .lab{margin-top:8px;font-size:10.5px;letter-spacing:.03em}
+ .box{background:#0d0d1a;display:flex;align-items:center;justify-content:center;overflow:hidden}
+ .circle{border-radius:50%} .squircle{border-radius:24%} .rounded{border-radius:18%}
+ img{display:block}
+ /* Lockup: the mark plus the word, for the store header, the sign-in screen and
+    the share page. This is where the wordmark belongs - it cannot be the icon. */
+ .lock{display:inline-flex;align-items:center;gap:14px;background:#0d0d1a;padding:22px 28px;border-radius:14px}
+ .word{font-family:Bebas,sans-serif;font-size:44px;line-height:.8;letter-spacing:.02em;color:#fff}
+ .word b{color:#7c3aed;font-weight:inherit}
+ .lock.sm{gap:9px;padding:14px 18px}.lock.sm .word{font-size:26px}
+ .stack{display:inline-flex;flex-direction:column;align-items:center;gap:10px;background:#0d0d1a;padding:24px 30px;border-radius:14px}
+ .stack .word{font-size:34px}
+</style>
+<h2>App icon &mdash; mark at 0.438 of the canvas</h2>
+<div class="row">
+  <div class="cell"><div class="box" style="width:170px;height:170px"><img src="mark.svg" style="width:74.5px"></div><div class="lab">unmasked</div></div>
+  <div class="cell"><div class="box circle" style="width:170px;height:170px"><img src="mark.svg" style="width:74.5px"></div><div class="lab">circle</div></div>
+  <div class="cell"><div class="box squircle" style="width:170px;height:170px"><img src="mark.svg" style="width:74.5px"></div><div class="lab">squircle</div></div>
+  <div class="cell"><div class="box rounded" style="width:170px;height:170px"><img src="mark.svg" style="width:74.5px"></div><div class="lab">rounded square</div></div>
+  <div class="cell"><div class="box rounded" style="width:170px;height:170px"><img src="mark.svg" style="width:112px"></div><div class="lab">non-cropping 0.66</div></div>
+</div>
+<h2>How small it survives</h2>
+<div class="row" style="align-items:flex-end">
+  <div class="cell"><div class="box rounded" style="width:64px;height:64px"><img src="mark.svg" style="width:42px"></div><div class="lab">64</div></div>
+  <div class="cell"><div class="box rounded" style="width:48px;height:48px"><img src="mark.svg" style="width:31.7px"></div><div class="lab">48</div></div>
+  <div class="cell"><div class="box rounded" style="width:32px;height:32px"><img src="mark.svg" style="width:21.1px"></div><div class="lab">32</div></div>
+  <div class="cell"><div class="box rounded" style="width:24px;height:24px"><img src="mark.svg" style="width:15.8px"></div><div class="lab">24</div></div>
+</div>
+<h2>Lockup &mdash; where the word does belong</h2>
+<div class="row">
+  <div class="cell"><div class="lock"><img src="mark.svg" style="height:46px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="lab">horizontal</div></div>
+  <div class="cell"><div class="lock sm"><img src="mark.svg" style="height:27px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="lab">small</div></div>
+  <div class="cell"><div class="stack"><img src="mark.svg" style="height:56px"><span class="word"><b>TUNE</b>MAIL</span></div><div class="lab">stacked</div></div>
+</div>
