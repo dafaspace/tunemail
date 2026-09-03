@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600" width="1600" height="1600">
+  <!-- Authored from primitives, not traced. A traced boundary wobbles and a
+       stroke on it doubles the wobble, which is why the outline kept coming out
+       uneven and broken. Circles are circles here and the stroke is one width
+       by construction. -->
+  <g stroke="#0d0d1a" stroke-width="34.0" stroke-linejoin="round" stroke-linecap="round" fill="none">
+
+    <!-- Record, behind the envelope -->
+    <circle cx="800.0" cy="720.5" r="520.5" fill="#7c3aed"/>
+    <g stroke-width="17.0"><path d="M506.6 658.1 A300.0 300.0 0 0 1 687.6 442.3"/><path d="M462.5 648.8 A345.0 345.0 0 0 1 670.8 400.6"/><path d="M423.4 640.5 A385.0 385.0 0 0 1 655.8 363.5"/><path d="M389.2 633.2 A420.0 420.0 0 0 1 642.7 331.1"/><path d="M357.9 626.5 A452.0 452.0 0 0 1 630.7 301.4"/><path d="M330.5 620.7 A480.0 480.0 0 0 1 620.2 275.5"/></g>
+    <circle cx="800.0" cy="720.5" r="222" fill="#7c3aed"/>
+    <circle cx="800.0" cy="720.5" r="167" fill="#7c3aed"/>
+    <circle cx="800.0" cy="720.5" r="32" fill="#0d0d1a"/>
+
+    <!-- Back wall: a band parallel to and above the flap edge. Its top corners
+         are the peaks that show either side of the record. -->
+    <path d="M200.0 569.0 L800.0 974.1 L1399.0 569.0 L1399.0 645.0 L800.0 1050.1 L200.0 645.0 Z" fill="#edeff5"/>
+
+    <!-- Front panel: the V the record sits behind -->
+    <path d="M200.0 645.0 L800.0 1050.1 L1399.0 645.0 L1399.0 1399.0 L200.0 1399.0 Z" fill="#edeff5"/>
+  </g>
+</svg>
