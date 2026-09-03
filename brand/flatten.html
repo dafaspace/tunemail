@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8">
+<!-- Collapses a generated draft onto the family palette.
+
+     A generator cannot be talked into exact hex values: draft 2 came back with
+     the envelope's left half at #ededf9 and its right at #dfe2f1, a hard seam
+     down the centre of the canvas at x=1025, 12 to 17 levels per channel. Dafa
+     saw it before any measurement did.
+
+     Rather than ask for another generation and hope, every pixel is classified
+     into one of the three colours the mark is allowed to use. That fixes the
+     seam and, more usefully, takes the file from 630 distinct colours to 3 -
+     which is the difference between a trace that yields tens of paths and one
+     that yields hundreds of near-black shards.
+
+     Field and outline are deliberately the same value. The mark reads as cut
+     out of the background rather than drawn on top of it, which is Cinemail's
+     rule and is what keeps the contours identical between siblings for free.
+
+     Open it in a browser with the draft beside it, or screenshot it headless:
+       chrome --headless --screenshot=out.png --window-size=2048,2048 flatten.html
+-->
+<style>html,body{margin:0;background:#0d0d1a}canvas{display:block;width:2048px;height:2048px}</style>
+<canvas id="c" width="2048" height="2048"></canvas><script>
+const img=new Image();
+img.onload=()=>{
+ const N=2048,c=document.getElementById('c'),x=c.getContext('2d',{willReadFrequently:true});
+ x.drawImage(img,0,0,N,N);
+ const d=x.getImageData(0,0,N,N),p=d.data;
+ const FIELD=[13,13,26],PAPER=[237,239,245],ACCENT=[124,58,237];
+ for(let i=0;i<p.length;i+=4){
+   const r=p[i],g=p[i+1],b=p[i+2],lum=0.2126*r+0.7152*g+0.0722*b;
+   const t = (b-g>45&&b>110&&r<200) ? ACCENT : (lum>150 ? PAPER : FIELD);
+   p[i]=t[0];p[i+1]=t[1];p[i+2]=t[2];p[i+3]=255;
+ }
+ x.putImageData(d,0,0);
+ document.title='done';
+};
+img.src='draft2.jpg';
+</script>
