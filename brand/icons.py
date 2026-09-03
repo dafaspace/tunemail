@@ -36,6 +36,12 @@ for s_ in (192, 512):
     made.append(shot(f'pwa/icon-{s_}.png', s_, 0.66, FIELD))
     made.append(shot(f'pwa/icon-{s_}-maskable.png', s_, 0.54, FIELD))
 made.append(shot('pwa/apple-touch-icon.png', 180, 0.66, FIELD))
+# Favicons carry the dark field with them, which is the whole reason a browser
+# tab in light mode never touches the mark. At 32 and 16 the mark is a shape
+# rather than a drawing, so it gets a little more room than 0.66.
+made.append(shot('pwa/favicon-48.png', 48, 0.72, FIELD))
+made.append(shot('pwa/favicon-32.png', 32, 0.72, FIELD))
+made.append(shot('pwa/favicon-16.png', 16, 0.76, FIELD))
 made.append(shot('store/icon-1024.png', 1024, 0.66, FIELD))
 
 # ---- Android adaptive ---------------------------------------------------
