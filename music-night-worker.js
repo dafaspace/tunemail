@@ -892,8 +892,12 @@ export default {
         shot = rawPath;
       }
 
+      // No id line. It used to open every message with a raw uuid because the
+      // reply handler read it back out of the text; the message_id is stored
+      // against the row instead, which Telegram assigns and nobody can type
+      // into a feedback form.
       const text =
-        `\`id:${feedback_id}\`\n${typeEmoji} *Tunemail Feedback*\n\n` +
+        `${typeEmoji} *Tunemail Feedback*\n\n` +
         `👤 ${escapeMarkdown(user_name)}\n📝 ${escapeMarkdown(message)}` +
         // Inside a MarkdownV2 link target only ")" and "\\" need escaping. Running
         // the URL through escapeMarkdown instead would litter it with backslashes
@@ -912,6 +916,27 @@ export default {
         });
         // A rejected send used to pass silently and the feedback vanished.
         if (!tg.ok) return json({ error: "Notification failed" }, 502, cors());
+
+        // Tie the message to the row, so a reply to it can be traced back
+        // without the id being printed in the message. A failure here costs
+        // only the ability to reply to this one notification, so it does not
+        // fail the request - but it is not silent either.
+        const sent = await tg.json().catch(() => null);
+        const messageId = sent?.result?.message_id;
+        if (messageId) {
+          const link = await fetch(`${SUPABASE_URL}/rest/v1/feedback?id=eq.${feedback_id}`, {
+            method: "PATCH",
+            headers: {
+              apikey: env.SUPABASE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ telegram_message_id: messageId }),
+          });
+          if (!link.ok) {
+            await notifyOwner(env, "Could not link that message to its report - replying to it will not work.");
+          }
+        }
       } catch {
         return json({ error: "Notification failed" }, 502, cors());
       }
@@ -954,16 +979,43 @@ export default {
         return new Response("Forbidden", { status: 403 });
       }
 
-      const originalText = message.reply_to_message.text || "";
-      const match = originalText.match(/^`?id:([a-f0-9-]{36})/m);
-      if (!match) {
-        // Replied to the wrong message - a confirmation, or one of these
-        // notices. Also silent before.
-        await notifyOwner(env, "Nothing was sent: that message carries no feedback id. Reply to the feedback itself.");
-        return new Response("OK", { status: 200 });
+      // Preferred: ask the database which report this message announced. A
+      // Telegram message_id is assigned by Telegram, so unlike a uuid parsed
+      // out of message text there is no way for a person writing feedback to
+      // influence it.
+      let feedbackId = null;
+      const repliedTo = message.reply_to_message.message_id;
+      if (repliedTo) {
+        try {
+          const r = await fetch(
+            `${SUPABASE_URL}/rest/v1/feedback?telegram_message_id=eq.${repliedTo}&select=id&limit=1`,
+            {
+              headers: {
+                apikey: env.SUPABASE_KEY,
+                Authorization: `Bearer ${env.SUPABASE_KEY}`,
+              },
+            }
+          );
+          if (r.ok) {
+            const rows = await r.json().catch(() => null);
+            if (Array.isArray(rows) && rows.length) feedbackId = rows[0].id;
+          }
+        } catch { /* fall through to the text form below */ }
       }
 
-      const feedbackId = match[1];
+      // Fallback for notifications sent before the id came out of the message.
+      if (!feedbackId) {
+        const originalText = message.reply_to_message.text || "";
+        const match = originalText.match(/^`?id:([a-f0-9-]{36})/m);
+        if (match) feedbackId = match[1];
+      }
+
+      if (!feedbackId) {
+        // Replied to the wrong message - a confirmation, or one of these
+        // notices. Silent before this.
+        await notifyOwner(env, "Nothing was sent: that message is not a feedback report. Reply to the report itself.");
+        return new Response("OK", { status: 200 });
+      }
       // Photo, voice and sticker replies carry no .text - the caption is the
       // next best thing, and with neither there is nothing to deliver.
       const replyText = message.text || message.caption;
