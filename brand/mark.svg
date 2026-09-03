@@ -1,63 +1,15 @@
-<!-- Tunemail mark: the family envelope with a record where Cinemail has a reel.
-
-     Redrawn as vector from Dafa's generated draft. The draft set the
-     composition and could not be the artwork: measured, it carried a background
-     of #16141f instead of our #0d0d1a, bottom corners 13 per channel darker
-     than the mid-edge - a rounded card baked in, which the family rules forbid
-     because masking is the system's job - and 678 distinct colours in 5-bit
-     buckets, from a soft shadow under the record and a gradient across the
-     flap. Flat artwork is what makes the layers separable later; a shaded
-     raster cannot be taken apart.
-
-     Proportions taken from the draft by measurement, after a first attempt eyed
-     them and got a small badge on a heavy dark chevron:
-
-       record diameter : envelope width   0.72   (was 0.60)
-       flap apex, down the envelope       0.71   (was 0.85, which is what made
-                                                  the V read as a chevron)
-       back-wall band : envelope height   0.21   (was 0.25, then 0.13, which
-                                                  a 6-unit outline on a 12-unit
-                                                  band ate almost entirely -
-                                                  the pale wall read as a dark
-                                                  line)
-       label : record diameter            0.24   (was 0.40)
-
-     Everything is a solid fill or a hard-edged stroke. No gradient, no shadow,
-     no blur, no pre-rounded corner, no frame.
-
-     Outlines are #0d0d1a, the same value as the page behind, so the mark reads
-     as cut out of the background rather than drawn on it. Stroke weight and the
-     exact envelope geometry are pending numbers from the Cinemail session -
-     that is the one part of this file expected to change, and it is what makes
-     the two siblings identical by construction rather than by eye. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 24 172 146" width="172" height="146">
-  <g stroke="#0d0d1a" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
-
-    <!-- Record, behind the envelope. The envelope's opaque fills cover its
-         lower edge, so no clip path is needed. -->
-    <circle cx="100" cy="86" r="62" fill="#7c3aed"/>
-
-    <!-- Grooves on the upper left only, as in the draft. A full set of
-         concentric rings turns to mush below 48px and one quadrant is enough to
-         say "record". Thin and separately stroked so they stay hairlines
-         instead of growing with the outline weight. -->
-    <g fill="none" stroke="#0d0d1a" stroke-width="2.6" stroke-linecap="round">
-      <path d="M54 70 A52 52 0 0 1 84 26"/>
-      <path d="M58 80 A45 45 0 0 1 84 42"/>
-      <path d="M63 90 A38 38 0 0 1 85 57"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14.0 0 172.0 170.1" width="172.0" height="170.1">
+  <g stroke="#0d0d1a" stroke-width="2.94" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="100.0" cy="61.6" r="61.5" fill="#7c3aed"/>
+    <g fill="none" stroke="#0d0d1a" stroke-width="1.23" stroke-linecap="round">
+      <path d="M49.0 43.6 A54 54 0 0 1 82.0 10.6"/>
+      <path d="M57.0 46.6 A45.5 45.5 0 0 1 85.0 18.6"/>
+      <path d="M65.0 49.6 A37 37 0 0 1 88.0 26.6"/>
     </g>
-
-    <!-- Label: an off-white ring, a purple centre and a punched spindle. Two
-         colours plus the outline - a third reads as noise at 48px. -->
-    <circle cx="100" cy="86" r="15" fill="#eef0f6"/>
-    <circle cx="100" cy="86" r="8.5" fill="#7c3aed" stroke-width="3.4"/>
-    <circle cx="100" cy="86" r="2.8" fill="#0d0d1a" stroke="none"/>
-
-    <!-- Envelope back wall: the band showing above the front panel that gives
-         the envelope its thickness. -->
-    <path d="M14 76 L14 56 L100 123 L186 56 L186 76 L100 143 Z" fill="#dfe3ec"/>
-
-    <!-- Front panel. Its top edge is the V the record sits behind. -->
-    <path d="M14 76 L100 143 L186 76 L186 170 L14 170 Z" fill="#eef0f6"/>
+    <circle cx="100.0" cy="61.6" r="14.5" fill="#eef0f6"/>
+    <circle cx="100.0" cy="61.6" r="7.7" fill="#7c3aed" stroke-width="1.76"/>
+    <circle cx="100.0" cy="61.6" r="2.6" fill="#0d0d1a" stroke="none"/>
+    <path d="M14.0 60.4 L14.0 50.9 L100.0 117.6 L186.0 50.9 L186.0 60.4 L100.0 127.2 Z" fill="#dfe3ec"/>
+    <path d="M14.0 60.4 L100.0 127.2 L186.0 60.4 L186.0 170.1 L14.0 170.1 Z" fill="#eef0f6"/>
   </g>
 </svg>
