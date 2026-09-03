@@ -1,0 +1,81 @@
+{
+  "_RULE_BEFORE_YOU_EDIT": [
+    "This file is a COPY. Cinemail keeps its own, and the two must stay identical.",
+    "",
+    "Do not change any number here without asking the Cinemail session first, and",
+    "do not accept a change from it without checking the number yourself against a",
+    "file rather than against a claim.",
+    "",
+    "That rule is not ceremony. Every wrong number in this file's history came from",
+    "one side measuring the wrong thing and the other side believing it:",
+    "  - 1.189 was reported as the envelope aspect three times. It is Cinemail's",
+    "    INK box, which includes the reel and the film strip. The envelope is 1.44.",
+    "    Found by measuring their isolated envelope layer instead of the composite;",
+    "    confirmed independently at 1.438 on their side against 1.441 on ours.",
+    "  - A flap apex at 42.7% across, and a flap edge angle of 38.2 degrees, were",
+    "    both withdrawn as antialiasing noise on a nearly flat edge.",
+    "",
+    "Measure the isolated thing, not the composite. Say which file you measured."
+  ],
+  "_howThisWasEstablished": [
+    "Not decided - discovered. Cinemail's envelope and Tunemail's draft were",
+    "generated separately, months apart, from prompts describing the same thing.",
+    "Measured against each other they turn out to already agree:",
+    "",
+    "                        Cinemail    Tunemail draft",
+    "  envelope aspect       1.443       1.443",
+    "  flap apex, down       0.649       0.640",
+    "",
+    "There was an apparent disagreement of 1.443 against 1.189 for a while. That",
+    "was an error of mine: 1.189 is Cinemail's INK box, which includes the reel",
+    "and the film strip, not its envelope. Comparing an ink box with a paper box.",
+    "",
+    "Two other numbers were retracted along the way and are recorded so nobody",
+    "reintroduces them: a flap apex at 42.7% across (noise - their flap edge is",
+    "so flat near the apex that the topmost pixel is decided by antialiasing) and",
+    "a flap edge angle of 38.2 degrees (from the same bad basis; at this aspect",
+    "it puts the apex below the envelope floor)."
+  ],
+  "envelope": {
+    "aspect": 1.443,
+    "_aspect": "width / height of the paper box. Cinemail 1193x827 at 2048; the Tunemail draft 1193x827 as well.",
+    "backWallPeakX": 0.1,
+    "backWallPeakY": 0.017,
+    "_backWall": "The top corner of the back wall, as fractions of the envelope box. Mirrored on the right.",
+    "flapEdgeAtSide": 0.125,
+    "flapApexX": 0.5,
+    "flapApexY": 0.649,
+    "_flap": "The front flap's top edge is a straight line from the side to the apex. Measured slope 1.049 of the height per unit of width, linear across x=0.15 to x=0.50, so a straight segment is faithful rather than an approximation.",
+    "apexCentred": true,
+    "_apexCentred": "Cinemail's looked off-centre at 42.7%; re-measurement showed that was antialiasing on a nearly flat edge. Nothing argues against centred, and Dafa's instinct was to centre it."
+  },
+  "outline": {
+    "colour": "the app's own background token",
+    "_colour": "Cinemail's fill census: 27 of 37 paths are #0D0D1A, which is also its background. The mark reads as cut out of the field rather than drawn on it. Identical between siblings for free as long as the field is.",
+    "strokeFractionOfInkWidth": 0.0171,
+    "_stroke": "63 samples across Cinemail's envelope left edge, median run 24px at 2048."
+  },
+  "perApp": {
+    "_": "What each sibling is allowed to differ in.",
+    "varies": [
+      "accent colour",
+      "the object rising out of the envelope"
+    ],
+    "doesNotVary": [
+      "the envelope",
+      "outline treatment",
+      "stroke weight",
+      "fonts",
+      "icons"
+    ],
+    "cinemail": {
+      "accent": "#f5c518",
+      "object": "film reel and strip"
+    },
+    "tunemail": {
+      "accent": "#7c3aed",
+      "object": "vinyl record"
+    }
+  },
+  "_knownLimit": "Cinemail's envelope, as it exists in docs/icon-layers/2-envelope.svg, is a fragment: the film strip covers its right shoulder entirely and a notch is cut where the reel sits in front. There is no complete authored envelope anywhere in that repo. The numbers above come from its uncontaminated left half, mirrored - which is why the apex being centred matters more than it looks."
+}

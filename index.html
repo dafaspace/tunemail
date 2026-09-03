@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Tunemail</title>
+  <!-- The manifest does not cover iOS; this is what a home-screen shortcut uses. -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0d0d1a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -2723,7 +2725,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v65';
+const APP_BUILD = 'v66';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and

@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION on every deploy that changes the precached files below,
  * otherwise returning visitors keep the old shell until the cache is evicted.
  */
-const CACHE_VERSION = 'v65';
+const CACHE_VERSION = 'v66';
 const CACHE_NAME = `tunemail-${CACHE_VERSION}`;
 
 /* Same-origin shell. Without any one of these the page cannot render, so these
@@ -13,7 +13,11 @@ const SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-192-maskable.png',
+  './icons/icon-512-maskable.png',
+  './icons/apple-touch-icon.png',
   './privacy.html',
   './fonts/bebas-neue-latin.woff2',
   './fonts/bebas-neue-latin-ext.woff2',
