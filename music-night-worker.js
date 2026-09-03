@@ -437,9 +437,26 @@ async function sharePage(slug, url) {
   const pl = pls && pls[0];
   if (!pl) return new Response("Not found", { status: 404 });
 
-  const [profiles, tracks] = await Promise.all([
+  // Four for the preview, and the real total separately. The page used to say
+  // "4+ tracks" for a playlist of 41, because the count it had was the length
+  // of the preview. That undersells the thing somebody is deciding whether to
+  // open, which is the one number on the page doing persuasive work.
+  const [profiles, tracks, countRes] = await Promise.all([
     sb(`profiles?id=eq.${pl.user_id}&select=display_name,username&limit=1`),
     sb(`playlist_tracks?playlist_id=eq.${pl.id}&select=artist,track_name&order=position&limit=4`),
+    fetch(`${SUPABASE_URL}/rest/v1/playlist_tracks?playlist_id=eq.${pl.id}&select=id`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        // Ask for the count in a header rather than dragging every row across.
+        Prefer: "count=exact",
+        Range: "0-0",
+      },
+      cf: { cacheTtl: 300, cacheEverything: true },
+    }).then((r) => {
+      const m = (r.headers.get("content-range") || "").match(/\/(\d+)$/);
+      return m ? parseInt(m[1], 10) : null;
+    }).catch(() => null),
   ]);
 
   // The sender's name comes from their id, never from the URL. Taking it from a
@@ -484,9 +501,13 @@ ${art ? `<meta property="og:image" content="${esc(art)}"><meta property="og:imag
 ${art ? `<meta name="twitter:image" content="${esc(art)}">` : ""}
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#0d0d1a;color:#f0f0f0;line-height:1.6;padding:24px;
+/* Was centred vertically, which on a phone meant the first third of the screen
+   was empty and the sender's name began below it. Content starts at the top
+   now, and only centres when there is room to spare. */
+body{margin:0;background:#0d0d1a;color:#f0f0f0;line-height:1.6;padding:32px 24px 40px;
      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-     display:flex;min-height:100vh;align-items:center;justify-content:center}
+     display:flex;min-height:100vh;align-items:flex-start;justify-content:center}
+@media (min-height:760px){body{align-items:center}}
 .card{max-width:420px;width:100%}
 .brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#7c3aed;font-weight:700;margin-bottom:14px}
 .from{font-size:15px;margin:0 0 14px}.from b{color:#a78bfa}
@@ -499,6 +520,16 @@ li{padding:3px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cta{display:block;margin-top:22px;background:#7c3aed;color:#fff;text-align:center;
      text-decoration:none;font-weight:600;padding:15px;border-radius:12px;font-size:16.5px}
 .sub{color:#9a9aa6;font-size:13px;text-align:center;margin-top:12px}
+/* The loop had no return leg. This page is put in front of somebody who has
+   never heard of Tunemail every single time it is used, and it ended with one
+   button that sends them to Spotify and nothing that brings them back.
+   Deliberately quiet and below the fold of attention: the visitor came to hear
+   what a friend sent, not to be sold to, and pushing here would cost the thing
+   that makes the page work. */
+.own{margin-top:34px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08);text-align:center}
+.own-line{color:#9a9aa6;font-size:13.5px;margin:0 0 12px;line-height:1.5}
+.own-cta{display:inline-block;color:#b69bff;text-decoration:none;font-size:14px;
+         font-weight:600;padding:12px 18px;border:1px solid rgba(182,155,255,.3);border-radius:10px}
 </style></head><body><div class="card">
 <div class="brand">Tunemail</div>
 ${fromName ? `<p class="from"><b>${esc(fromName)}</b> sent you this</p>` : ""}
@@ -506,12 +537,19 @@ ${fromName ? `<p class="from"><b>${esc(fromName)}</b> sent you this</p>` : ""}
   ${art ? `<img src="${esc(art)}" alt="">` : ""}
   <div>
     <h1>${esc(title)}</h1>
-    <p class="meta">${list.length ? `${list.length}${list.length === 4 ? "+" : ""} track${list.length === 1 ? "" : "s"}` : "Playlist"}</p>
+    <p class="meta">${(() => {
+      const n = typeof countRes === "number" && countRes > 0 ? countRes : list.length;
+      return n ? `${n} track${n === 1 ? "" : "s"}` : "Playlist";
+    })()}</p>
   </div>
 </div>
 ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_name)}</li>`).join("")}</ul>` : ""}
 <a class="cta" href="${esc(appUrl)}">Listen &rarr;</a>
 <p class="sub">Opens in whatever you already use. No app, no account.</p>
+<div class="own">
+  <p class="own-line">Send music back, to anyone, whatever they listen with.</p>
+  <a class="own-cta" href="https://tunemail.app/">Make your own &rarr;</a>
+</div>
 </div></body></html>`;
 
   return new Response(html, {
