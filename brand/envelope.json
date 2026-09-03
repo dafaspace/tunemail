@@ -1,20 +1,21 @@
 {
   "_comment": [
     "The family envelope as named fractions, so both marks can be generated from",
-    "one set of numbers instead of matching by eye. Every value here was measured,",
-    "not chosen: the draft was scanned by colour for the paper and record boxes,",
-    "and by column for the flap edge.",
+    "one set of numbers instead of matching by eye. Every value here was measured.",
     "",
-    "These do NOT currently agree with Cinemail's, and that disagreement is the",
-    "open question - either the two generators drifted and the family has no",
-    "single envelope yet, or Cinemail's is the reference and this draft should be",
-    "redrawn to it. Dafa decides; both sets are recorded below so he decides with",
-    "numbers rather than with a question."
+    "The disagreement between the two drawings is real: 1.443 here against 1.189",
+    "there. Neither was decided - both are generator output that was measured",
+    "afterwards. So this is not 'which app is right', it is 'the family has no",
+    "envelope yet and needs one chosen'.",
+    "",
+    "Cinemail's session proposes this file live at the My Apps root, which both",
+    "repos already load, rather than as a copy in each - a copied constants file",
+    "diverges the first time somebody edits the near one."
   ],
   "tunemail_draft_measured": {
     "envelopeAspect": 1.443,
-    "flapShoulder": 0.080,
-    "flapApex": 0.640,
+    "flapShoulder": 0.08,
+    "flapApex": 0.64,
     "recordOverEnvelopeWidth": 0.715,
     "inkAspect": 1.011,
     "envelopeTopWithinInk": 0.299,
@@ -22,12 +23,18 @@
     "recordVisibleAboveEnvelope": 0.413
   },
   "cinemail_master_measured": {
-    "envelopeAspect": 1.190,
-    "flapShoulder": 0.395,
-    "flapEdgeAngleDeg": 38.2,
-    "flapApexAcross": 0.427,
-    "inkAspect": 1.190,
-    "_note": "Their apex is not centred. They could not say whether that is deliberate or generator drift, and would not decide it for the family."
+    "envelopeAspect": 1.189,
+    "inkWidthOfCanvas": 0.686,
+    "inkHeightOfCanvas": 0.576,
+    "_retracted": [
+      "flapShoulder 0.395, flapEdgeAngleDeg 38.2 and flapApexAcross 0.427 were",
+      "withdrawn by the Cinemail session after re-measuring. Their flap edge",
+      "flattens to 0.033 of the envelope height between x=0.30 and x=0.40, so the",
+      "topmost white pixel there is decided by one pixel of antialiasing and can",
+      "land anywhere across a wide span. The off-centre apex was that noise.",
+      "Nothing in their file argues against a centred apex."
+    ],
+    "_note": "Their envelope was generated and then traced. There is no authored version to be faithful to, so 'redraw Tunemail to match Cinemail' is not a thing that can be done."
   },
   "shared": {
     "outline": "background colour, whatever the app sets it to",
