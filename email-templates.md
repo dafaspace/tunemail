@@ -46,8 +46,8 @@ Paste each **Body** into the matching template's Source view, and the
         <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
              style="display:block;border-radius:8px">
       </td>
-      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
-        <span style="color:#7c3aed">TUNE</span>MAIL
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
+        <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
       </td>
     </tr>
   </table>
@@ -86,8 +86,8 @@ Paste each **Body** into the matching template's Source view, and the
         <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
              style="display:block;border-radius:8px">
       </td>
-      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
-        <span style="color:#7c3aed">TUNE</span>MAIL
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
+        <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
       </td>
     </tr>
   </table>
@@ -128,8 +128,8 @@ Paste each **Body** into the matching template's Source view, and the
         <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
              style="display:block;border-radius:8px">
       </td>
-      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
-        <span style="color:#7c3aed">TUNE</span>MAIL
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
+        <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
       </td>
     </tr>
   </table>
@@ -171,8 +171,8 @@ Note: this one is sent to the NEW address, and `{{ .Email }}` is the old one.
         <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
              style="display:block;border-radius:8px">
       </td>
-      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
-        <span style="color:#7c3aed">TUNE</span>MAIL
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
+        <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
       </td>
     </tr>
   </table>
@@ -215,8 +215,8 @@ if it is ever switched on.
         <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
              style="display:block;border-radius:8px">
       </td>
-      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
-        <span style="color:#7c3aed">TUNE</span>MAIL
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
+        <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
       </td>
     </tr>
   </table>
