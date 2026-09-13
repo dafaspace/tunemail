@@ -43,8 +43,8 @@ Paste each **Body** into the matching template's Source view, and the
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
     <tr>
       <td style="padding-right:10px;vertical-align:middle">
-        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
-             style="display:block;border-radius:8px">
+        <img src="https://tunemail.app/icons/mark-96.png" width="38" height="38" alt=""
+             style="display:block">
       </td>
       <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
         <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
@@ -83,8 +83,8 @@ Paste each **Body** into the matching template's Source view, and the
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
     <tr>
       <td style="padding-right:10px;vertical-align:middle">
-        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
-             style="display:block;border-radius:8px">
+        <img src="https://tunemail.app/icons/mark-96.png" width="38" height="38" alt=""
+             style="display:block">
       </td>
       <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
         <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
@@ -125,8 +125,8 @@ Paste each **Body** into the matching template's Source view, and the
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
     <tr>
       <td style="padding-right:10px;vertical-align:middle">
-        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
-             style="display:block;border-radius:8px">
+        <img src="https://tunemail.app/icons/mark-96.png" width="38" height="38" alt=""
+             style="display:block">
       </td>
       <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
         <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
@@ -168,8 +168,8 @@ Note: this one is sent to the NEW address, and `{{ .Email }}` is the old one.
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
     <tr>
       <td style="padding-right:10px;vertical-align:middle">
-        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
-             style="display:block;border-radius:8px">
+        <img src="https://tunemail.app/icons/mark-96.png" width="38" height="38" alt=""
+             style="display:block">
       </td>
       <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
         <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>
@@ -212,8 +212,8 @@ if it is ever switched on.
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
     <tr>
       <td style="padding-right:10px;vertical-align:middle">
-        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
-             style="display:block;border-radius:8px">
+        <img src="https://tunemail.app/icons/mark-96.png" width="38" height="38" alt=""
+             style="display:block">
       </td>
       <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px;color:#f0f0f0">
         <span style="color:#7c3aed">TUNE</span><span style="color:#f0f0f0">MAIL</span>

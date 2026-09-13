@@ -40,6 +40,12 @@ made.append(shot('pwa/apple-touch-icon.png', 180, 0.66, FIELD))
 # tab in light mode never touches the mark. At 32 and 16 the mark is a shape
 # rather than a drawing, so it gets a little more room than 0.66.
 made.append(shot('pwa/favicon-48.png', 48, 0.72, FIELD))
+# For email. No field of its own: Gmail's dark theme lightens a dark image, and
+# in a real inbox our dark square came out white. With transparency there is no
+# block to invert - the envelope and the record carry their own colour and the
+# card shows through where the field would have been.
+# 96 for a 48px slot, because mail is read on phones at 2x.
+made.append(shot('email/mark-96.png', 96, 0.94))
 made.append(shot('pwa/favicon-32.png', 32, 0.72, FIELD))
 made.append(shot('pwa/favicon-16.png', 16, 0.76, FIELD))
 made.append(shot('store/icon-1024.png', 1024, 0.66, FIELD))
