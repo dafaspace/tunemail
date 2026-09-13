@@ -777,7 +777,7 @@ export default {
         // as well as fourteen. Yesterday's 504s produced a message every ten
         // minutes, each claiming a pause that was not happening.
         if (await alarmAllowed("keepalive", 6 * 3600)) {
-          await notifyOwner(
+          await notifyOps(
             env,
             `Keep-alive could not reach Supabase: ${res.detail}, after 3 tries. ` +
             `Silent for 6h. If the project is paused, un-pause it in the dashboard; ` +
@@ -794,9 +794,16 @@ export default {
       // minutes saying "still fine" is a message nobody reads.
       const tg = await ensureTelegramWebhook(env);
       if (tg.repaired) {
-        await notifyOwner(env, `Telegram webhook was missing (was: ${tg.was}) and has been re-registered.`);
+        await notifyOps(env, `Telegram webhook was missing (was: ${tg.was}) and has been re-registered.`);
       } else if (tg.checked === false) {
-        await notifyOwner(env, `Could not check the Telegram webhook: ${tg.detail}`);
+        // Same cooldown as the keepalive, and for the same reason: if Telegram
+        // itself is unreachable this fires on every tick, and it fires into
+        // Telegram, so the one case where it has something to say is the case
+        // where it cannot say it. Six hours, separate key, so a Supabase alarm
+        // never silences a Telegram one.
+        if (await alarmAllowed("telegram-check", 6 * 3600)) {
+          await notifyOps(env, `Could not check the Telegram webhook: ${tg.detail}. Silent for 6h.`);
+        }
       }
     })());
   },
@@ -1152,6 +1159,19 @@ export default {
     return new Response("Not found", { status: 404, headers: cors() });
   },
 };
+
+// System alarms, as opposed to notifyOwner's replies to something the owner
+// just did. Both land in the chat users write feedback into, so the two have to
+// be tellable apart at a glance: a report that needs reading must not look like
+// a machine complaining about a gateway.
+//
+// Plain text and no parse_mode on purpose. A status string can contain any
+// character Telegram treats as markup, and a MarkdownV2 payload with one stray
+// bracket is rejected outright - which would lose the alarm rather than format
+// it badly.
+async function notifyOps(env, text) {
+  return notifyOwner(env, `SYSTEM  ${text}`);
+}
 
 async function notifyOwner(env, text) {
   try {
