@@ -1966,7 +1966,10 @@ button {
           </div>
           <button class="btn btn-secondary btn-sm" id="btn-parse-link" style="white-space:nowrap">↵ Fill</button>
         </div>
-        <div style="margin-top:32px;text-align:center">
+        <!-- Recognition. Removed from the page at startup when AUDD_ENABLED is
+             false - the whole block, label included, so there is no orphan
+             "or let me hear" above nothing. -->
+        <div id="audd-block" style="margin-top:32px;text-align:center">
           <div style="font-size:11px;color:var(--muted);font-family:DM Sans;margin-bottom:10px;letter-spacing:0.3px">or let me hear</div>
           <button id="btn-audd" aria-label="Identify the song playing nearby" title="Identify song playing nearby" style="
             width:68px;height:68px;border-radius:50%;border:none;cursor:pointer;
@@ -2804,7 +2807,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v71';
+const APP_BUILD = 'v72';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4576,17 +4579,35 @@ document.getElementById('btn-new-playlist-inline').addEventListener('click', () 
 // ── AudD Music Recognition ───────────────────────────────────────────
 // The AudD token lives in the worker, not here: anything in this file is
 // public, and a leaked token is someone else spending our recognition quota.
+//
+// SWITCHED OFF, not deleted. AudD charges per recognition and recognition is
+// moving to ShazamKit, which is free with the developer programme we already
+// pay for but exists only in the native builds. Turning this back on is one
+// word: AUDD_ENABLED = true, redeploy. The worker route, the rate limiter and
+// the token are all still in place and untouched, so nothing else has to be
+// restored to match. Deleting the code instead would have made a return a
+// merge from history, and history is where features go to not come back.
+const AUDD_ENABLED = false;
+
 let auddRecording = false;
 let auddMediaRecorder = null;
 let auddChunks = [];
 
 function auddStatus(msg) {
   const el = document.getElementById('audd-status');
+  if (!el) return;   // the block is removed when recognition is switched off
   if (msg) { el.textContent = msg; el.style.display = ''; }
   else { el.style.display = 'none'; el.textContent = ''; }
 }
 
-document.getElementById('btn-audd').addEventListener('click', async () => {
+// Removed rather than hidden: a hidden control is still reachable by keyboard
+// and by a screen reader, and "Identify the song playing nearby" that does
+// nothing is worse than no button.
+if (!AUDD_ENABLED) document.getElementById('audd-block')?.remove();
+
+const _auddBtn = AUDD_ENABLED ? document.getElementById('btn-audd') : null;
+
+if (_auddBtn) _auddBtn.addEventListener('click', async () => {
   if (auddRecording) return;
 
   const btn = document.getElementById('btn-audd');
