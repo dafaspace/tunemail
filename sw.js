@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION on every deploy that changes the precached files below,
  * otherwise returning visitors keep the old shell until the cache is evicted.
  */
-const CACHE_VERSION = 'v70';
+const CACHE_VERSION = 'v71';
 const CACHE_NAME = `tunemail-${CACHE_VERSION}`;
 
 /* Same-origin shell. Without any one of these the page cannot render, so these
@@ -20,6 +20,10 @@ const SHELL = [
   './icons/apple-touch-icon.png',
   './icons/favicon-32.png',
   './icons/favicon-16.png',
+  // The boot splash paints before anything else, so the mark has to be in the
+  // shell rather than fetched at that moment - a cold offline launch would
+  // otherwise show the wordmark with a hole beside it.
+  './icons/mark-96.png',
   './privacy.html',
   './fonts/bebas-neue-latin.woff2',
   './fonts/bebas-neue-latin-ext.woff2',

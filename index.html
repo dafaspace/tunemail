@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="booting">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
@@ -12,6 +12,54 @@
   <meta name="theme-color" content="#0d0d1a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- Boot guard, and it has to be in the head to work at all.
+
+       Measured, sampling every animation frame: the sign-in screen painted at
+       17 ms and was hidden again at 236 ms. It is marked `active` in the markup,
+       so it is visible from the first paint, while the two CDN scripts that the
+       init waits on sit at the END of the body - the browser finishes parsing,
+       paints what it has, and only then blocks on them. The code that hides the
+       screen runs after both have loaded. On a phone over mobile data those two
+       requests are the "second of blinking" before an email link opens the app.
+
+       So nothing app-shaped paints until the init has decided what to show. The
+       wordmark below fills that gap deliberately instead of leaving a dark hole.
+       A style element rather than a class on each screen: this must apply before
+       any script has run. -->
+  <style>
+    html.booting .screen,
+    html.booting #main-app,
+    html.booting #public-view { display: none !important; }
+    #boot {
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: #0d0d1a;
+    }
+    html.booting #boot { display: flex; }
+    /* The same lockup as the emails - mark left, wordmark right - because the
+       family rule is that if two surfaces draw the same thing they draw it with
+       the same file, and this is the first thing anyone sees. */
+    #boot .lockup { display: flex; align-items: center; gap: 12px; }
+    #boot img { display: block; width: 46px; height: 46px; }
+    #boot span {
+      font-family: 'Bebas Neue', Impact, sans-serif;
+      font-size: 40px; letter-spacing: 3px; color: #f0f0f0;
+      /* Tracking adds a gap after the last letter; give it back, or the
+         wordmark sits right of centre by half of it. */
+      text-indent: 3px;
+    }
+    #boot span b { color: #7c3aed; font-weight: inherit; }
+  </style>
+  <script>
+    // If the init never gets to decide - a CDN that will not answer, a script
+    // error - a permanently blank page is the worst possible outcome, because it
+    // looks like a broken app rather than a broken network. Ten seconds is past
+    // any honest load and short enough that nobody has given up yet.
+    setTimeout(function () {
+      document.documentElement.classList.remove('booting');
+    }, 10000);
+  </script>
   <style>
     /* ── Fonts: self-hosted, no third-party dependency ─────────────── */
     @font-face {
@@ -741,6 +789,12 @@ button {
     .danger-note {
       margin: 0 0 12px; font-size: 12.5px; line-height: 1.55;
       color: var(--muted-strong);
+    }
+    /* The address is shown because the point of typing it is to prove you know
+       which account this is, not to test your memory of it. */
+    .field-hint {
+      margin: 8px 0 0; font-size: 12px; line-height: 1.5;
+      color: var(--muted-strong); word-break: break-all;
     }
     .edit-danger .btn {
       width: 100%;
@@ -1645,6 +1699,15 @@ button {
   </style>
 </head>
 <body>
+
+<!-- Shown only while html.booting is set - see the boot guard in the head. -->
+<div id="boot">
+  <div class="lockup">
+    <img src="icons/mark-96.png" width="46" height="46" alt="">
+    <span><b>TUNE</b>MAIL</span>
+  </div>
+</div>
+
 <div id="app">
 
   <!-- ── Toast ─────────────────────────────────────────────────────── -->
@@ -2313,10 +2376,12 @@ button {
           made, and any screenshots you sent. Links you have shared will stop
           working. It happens at once and cannot be undone.
         </p>
-        <div class="form-group">
-          <label for="del-confirm-input">Type DELETE to confirm</label>
-          <input id="del-confirm-input" type="text" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false" placeholder="DELETE">
+        <div class="form-group" id="del-confirm-group">
+          <label for="del-confirm-input">Type your email address to confirm</label>
+          <input id="del-confirm-input" type="email" inputmode="email"
+                 autocomplete="off" autocapitalize="none" autocorrect="off"
+                 spellcheck="false" placeholder="you@example.com">
+          <p class="field-hint" id="del-confirm-hint"></p>
         </div>
         <div class="modal-footer" style="margin-top:18px;padding:0">
           <button class="fb-btn-cancel" data-close="overlay-delete-account">Cancel</button>
@@ -2417,7 +2482,18 @@ let currentPlaylist = null;
 let confirmCallback = null;
 
 // ── Screen management ─────────────────────────────────────────────────
+
+// The boot guard hides every screen until something here decides which one to
+// show. Every path that reveals the app has to end it, so it is called from the
+// four places that can: showScreen, onSignedIn, guest mode and the public view.
+// Missing one means a blank page on that path, which is why it is a named
+// function rather than the same line written out four times.
+function endBoot() {
+  document.documentElement.classList.remove('booting');
+}
+
 function showScreen(name) {
+  endBoot();
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('main-app').classList.remove('active');
   document.getElementById('public-view').classList.remove('active');
@@ -2430,6 +2506,7 @@ function showScreen(name) {
 let isGuest = false;
 
 function enterGuestMode() {
+  endBoot();
   isGuest = true;
   currentUser = null;
   document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
@@ -2727,7 +2804,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v70';
+const APP_BUILD = 'v71';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4896,6 +4973,7 @@ function populateAccount(user) {
 
 // ── Auth: onSignedIn ──────────────────────────────────────────────────
 async function onSignedIn(user) {
+  endBoot();
   currentUser = user;
   populateAccount(user);
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -4989,29 +5067,49 @@ document.getElementById('btn-signup').addEventListener('click', async () => {
 
 // ── Auth: Sign Out ────────────────────────────────────────────────────
 
-// Deleting an account is irreversible and the confirmation is sized to match:
-// typing the word is a deliberate act, where a second tap on a dialog is not.
+// Deleting an account is irreversible and the confirmation is sized to match.
+// It asks for the account's own email rather than the word DELETE: the word is
+// the same in every account, so typing it proves only that you can read. The
+// address proves you know which account you are standing in, which is the thing
+// that actually goes wrong - the wrong account deleted by someone sure they
+// were in the other one.
 const _delAccount = document.getElementById('btn-delete-account');
+const _delGroup = document.getElementById('del-confirm-group');
 const _delInput = document.getElementById('del-confirm-input');
+const _delHint = document.getElementById('del-confirm-hint');
 const _delConfirm = document.getElementById('btn-delete-confirm');
 
+// An account can exist with no email at all - a provider sign-in that returned
+// none. There is then nothing to type, so the field is not shown rather than
+// shown and impossible to satisfy, which would lock the person out of deleting.
+function delWantedEmail() {
+  return String(currentUser?.email || '').trim().toLowerCase();
+}
+function delMatches() {
+  const want = delWantedEmail();
+  return want === '' || _delInput.value.trim().toLowerCase() === want;
+}
+
 if (_delAccount) _delAccount.addEventListener('click', () => {
+  const want = delWantedEmail();
   _delInput.value = '';
-  _delConfirm.disabled = true;
+  if (_delGroup) _delGroup.hidden = !want;
+  if (_delHint) _delHint.textContent = want ? `This account is ${want}` : '';
+  _delConfirm.disabled = !delMatches();
   _delConfirm.textContent = 'Delete for ever';
   openModal('overlay-delete-account');
   // Not focused on open: the field should be reached deliberately, and a
   // keyboard springing up over the warning is the opposite of reading it.
 });
 
-// The word gates the button rather than being checked after the fact, so there
-// is no state where the destructive control is live and the word is wrong.
+// The address gates the button rather than being checked after the fact, so
+// there is no state where the destructive control is live and the input is wrong.
 if (_delInput) _delInput.addEventListener('input', () => {
-  _delConfirm.disabled = _delInput.value.trim().toUpperCase() !== 'DELETE';
+  _delConfirm.disabled = !delMatches();
 });
 
 if (_delConfirm) _delConfirm.addEventListener('click', async () => {
-  if (_delInput.value.trim().toUpperCase() !== 'DELETE') return;
+  if (!delMatches()) return;
 
   _delConfirm.disabled = true;
   _delConfirm.textContent = 'Deleting...';
@@ -6157,6 +6255,10 @@ async function claimPendingPlaylist() {
 
 // ── User Profile: load ───────────────────────────────────────────────
 async function loadUserProfile(username) {
+  // A fifth surface, and not one of the three the boot CSS hides - but #boot is
+  // fixed and covers the whole viewport, so without this the profile page would
+  // load correctly underneath the wordmark and look like a hang.
+  endBoot();
   document.getElementById('profile-view').style.display = 'block';
   try {
     // Find user by username
@@ -6277,6 +6379,7 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
 
   const slug = params.get('p');
   if (slug) {
+    endBoot();
     document.getElementById('public-view').classList.add('active');
     // Init Supabase for public read (no auth needed)
     sbClient = window.supabase.createClient(SB_URL, SB_KEY, {
