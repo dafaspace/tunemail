@@ -43,6 +43,13 @@
       </array>
     </dict>
 	</dict>
+	<!-- Shown verbatim in the system prompt, so it says what the microphone is
+	     for and nothing else. Recording never leaves the device: ShazamKit
+	     matches on a signature, not on the audio. If recognition is ever cut
+	     from the build, this key must go with it - an unused permission string
+	     is an App Store 5.1.1 rejection. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tunemail listens to the music around you to identify what is playing. The recording never leaves your device.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
