@@ -1,0 +1,31 @@
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0d0d1a;color:#f0f0f0;border-radius:12px">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">
+    <tr>
+      <td style="padding-right:10px;vertical-align:middle">
+        <img src="https://tunemail.app/icons/favicon-48.png" width="34" height="34" alt=""
+             style="display:block;border-radius:8px">
+      </td>
+      <td style="vertical-align:middle;font-size:28px;font-weight:900;letter-spacing:2px">
+        <span style="color:#7c3aed">TUNE</span>MAIL
+      </td>
+    </tr>
+  </table>
+  <p style="color:#9a9aa6;font-size:14px;margin:0 0 24px">Share music that opens wherever they listen</p>
+
+  <p style="font-size:16px;margin:0 0 12px">One tap and you are in.</p>
+  <p style="color:#c9c7d4;font-size:14px;line-height:1.6;margin:0 0 24px">
+    Confirm this address and your playlists, your tracks and your picks are yours to send.
+  </p>
+
+  <a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=email"
+     style="display:inline-block;background:#7c3aed;color:#fff;font-weight:700;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;letter-spacing:1px">CONFIRM MY ACCOUNT</a>
+
+  <p style="color:#9a9aa6;font-size:12px;line-height:1.6;margin:24px 0 0">
+    Or paste this into your browser:<br>
+    <span style="color:#b69bff;word-break:break-all">{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=email</span>
+  </p>
+
+  <p style="color:#9a9aa6;font-size:11px;margin:32px 0 0">
+    Did not sign up? Ignore this email and nothing happens.
+  </p>
+</div>
