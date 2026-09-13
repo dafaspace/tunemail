@@ -14,6 +14,28 @@ const ALLOWED_ORIGIN = 'https://tunemail.app';
 // AudD rejects anything larger, and there is no point paying to find out.
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
+// One alarm per key per window, so a fault that repeats every ten minutes does
+// not repeat in the chat every ten minutes. Uses the edge cache rather than a
+// KV namespace because this has to work with nothing new to set up, and an
+// alarm that is occasionally allowed twice is harmless - the point is to stop
+// fourteen, not to be exact.
+async function alarmAllowed(key, seconds) {
+  const url = `https://cache.tunemail/alarm/${key}`;
+  const cache = caches.default;
+  try {
+    if (await cache.match(new Request(url))) return false;
+    await cache.put(
+      new Request(url),
+      new Response("1", { headers: { "Cache-Control": `max-age=${seconds}` } })
+    );
+  } catch {
+    // If the cache is unavailable, speak rather than stay silent: a missed
+    // alarm is worse than a duplicate one.
+    return true;
+  }
+  return true;
+}
+
 // A signed-in user may spend this many recognitions per hour. Sign-up is open,
 // so a valid token proves only that somebody made an account - without a cap,
 // one throwaway account can drain the paid quota.
@@ -676,27 +698,45 @@ async function pingSupabase(env, opts = {}) {
     } catch { /* the write below is what matters; this is only for the report */ }
   }
 
+  // Three attempts, backing off. A 504 from Supabase is its gateway having a
+  // bad second, not the project being gone: retrying 5 and then 15 seconds
+  // later clears almost all of them. Without this, one bad second in six
+  // hundred produced an alarm claiming the project was about to be paused.
+  let r = null, lastDetail = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((res) => setTimeout(res, attempt * 10000 - 5000));
+    try {
+      r = await fetch(`${SUPABASE_URL}/rest/v1/keepalive?id=eq.1`, {
+        method: "PATCH",
+        headers: {
+          apikey: env.SUPABASE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          // Ask for the row back, so a PATCH that matched nothing is visible.
+          // PostgREST answers 204 either way, which reads as success.
+          Prefer: "return=representation",
+        },
+        // The caller says who it is. This stamped "cron" unconditionally, so a
+        // manual check wrote a row indistinguishable from a scheduled one - and
+        // then the next manual check read that row back and reported the cron as
+        // alive. The field built to tell the two apart was recording neither.
+        body: JSON.stringify({
+          last_ping: new Date().toISOString(),
+          source: opts.source || "manual",
+        }),
+      });
+      if (r.ok) break;
+      lastDetail = `supabase ${r.status}`;
+      // Only a gateway or overload is worth retrying. A 401 or a 404 will say
+      // the same thing three times and delay the report that matters.
+      if (![429, 500, 502, 503, 504].includes(r.status)) break;
+    } catch {
+      lastDetail = "unreachable";
+    }
+  }
+
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/keepalive?id=eq.1`, {
-      method: "PATCH",
-      headers: {
-        apikey: env.SUPABASE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        // Ask for the row back, so a PATCH that matched nothing is visible.
-        // PostgREST answers 204 either way, which reads as success.
-        Prefer: "return=representation",
-      },
-      // The caller says who it is. This stamped "cron" unconditionally, so a
-      // manual check wrote a row indistinguishable from a scheduled one - and
-      // then the next manual check read that row back and reported the cron as
-      // alive. The field built to tell the two apart was recording neither.
-      body: JSON.stringify({
-        last_ping: new Date().toISOString(),
-        source: opts.source || "manual",
-      }),
-    });
-    if (!r.ok) return { ok: false, detail: `supabase ${r.status}` };
+    if (!r || !r.ok) return { ok: false, detail: lastDetail || "unreachable", attempts: 3 };
     const rows = await r.json().catch(() => null);
     if (!Array.isArray(rows) || !rows.length) {
       return { ok: false, detail: "keepalive row missing - run migration 010" };
@@ -725,8 +765,25 @@ export default {
     ctx.waitUntil((async () => {
       const res = await pingSupabase(env, { source: "cron" });
       if (!res.ok) {
-        // Better to be told the alarm is broken than to find out from Supabase.
-        await notifyOwner(env, `Keep-alive failed: ${res.detail}. The project may pause.`);
+        // This alarm shares a chat with user feedback, so a false one does more
+        // than annoy: it buries the bug report underneath it. Two guards.
+        //
+        // First, three attempts already happened inside pingSupabase, so
+        // arriving here means Supabase was unreachable for about twenty
+        // seconds rather than for one request.
+        //
+        // Second, a cooldown. The failure that matters is a project that has
+        // paused, and that does not un-pause on its own - one message says it
+        // as well as fourteen. Yesterday's 504s produced a message every ten
+        // minutes, each claiming a pause that was not happening.
+        if (await alarmAllowed("keepalive", 6 * 3600)) {
+          await notifyOwner(
+            env,
+            `Keep-alive could not reach Supabase: ${res.detail}, after 3 tries. ` +
+            `Silent for 6h. If the project is paused, un-pause it in the dashboard; ` +
+            `a 5xx usually clears on its own.`
+          );
+        }
       }
       // No KV binding needed: the write records its own timestamp, so the
       // question "when did this last run" is answered by the thing it does
