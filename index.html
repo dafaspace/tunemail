@@ -2832,7 +2832,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v74';
+const APP_BUILD = 'v75';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3314,10 +3314,29 @@ function scoreCandidate(cand, artist, track) {
 // artworkUrl100 is a thumbnail; the same URL serves any size.
 const bigArt = (url) => url ? url.replace(/\/\d+x\d+bb\./, '/600x600bb.') : null;
 
+// "Could not ask" and "asked, and it is not there" are different answers, and
+// until now every lookup below returned null for both. That mattered because
+// enrichTrackList writes a 30-day `enrich_missed_at` marker for a null, into a
+// cache SHARED BY EVERY USER - so one visitor on bad wi-fi, or one iTunes 429,
+// suppressed artwork and previews for that recording for everybody for a month,
+// and the marker itself then skipped the retry that would have fixed it.
+// migrations/009_clear_stale_misses.sql is the receipt: four markers, all
+// written on one day by a lookup that could not look.
+//
+// A frozen shared object rather than null, so the difference survives the
+// journey back up through three callers.
+const LOOKUP_FAILED = Object.freeze({ failed: true });
+const lookupFailed = (v) => !!(v && v.failed);
+
 async function searchItunesOnce(artist, track, matchArtist, matchTrack) {
   const term = encodeURIComponent(`${artist} ${track}`.trim());
-  const res = await fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=12`);
-  if (!res.ok) return null;
+  let res;
+  try {
+    res = await fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=12`);
+  } catch (e) { return LOOKUP_FAILED; }
+  // 429 is the one that bites: iTunes throttles by address, so a busy network
+  // produces a flood of them, and every one used to read as "no such song".
+  if (!res.ok) return LOOKUP_FAILED;
   const { results = [] } = await res.json();
   let best = null, bestScore = 0;
   for (const c of results) {
@@ -3334,6 +3353,7 @@ async function searchItunesOnce(artist, track, matchArtist, matchTrack) {
 
 async function lookupItunes(artist, track) {
   let hit = await searchItunesOnce(artist, track, artist, track);
+  if (lookupFailed(hit)) return LOOKUP_FAILED;
 
   // Imports join collaborators with semicolons and keep "(feat. ...)" in the
   // title, and a search for the whole string finds nothing at all. Measured on
@@ -3346,6 +3366,7 @@ async function lookupItunes(artist, track) {
     if (firstArtist !== artist || bareTrack !== track) {
       await new Promise(r => setTimeout(r, 150));
       hit = await searchItunesOnce(firstArtist, bareTrack, firstArtist, bareTrack);
+      if (lookupFailed(hit)) return LOOKUP_FAILED;
     }
   }
   if (!hit) return null;
@@ -3377,11 +3398,12 @@ async function resolveAppleByIsrc(isrc) {
   let out = null;
   try {
     const r = await fetch(`${MUSIC_NIGHT_WORKER}/resolve?isrc=${encodeURIComponent(isrc)}`);
-    if (r.ok) {
-      const d = await r.json();
-      if (d && d.found) out = d;
-    }
-  } catch (e) { /* an unreachable resolver falls through to search */ }
+    // Not cached, and not reported as an answer: an unreachable resolver knows
+    // nothing about this recording.
+    if (!r.ok) return LOOKUP_FAILED;
+    const d = await r.json();
+    if (d && d.found) out = d;
+  } catch (e) { return LOOKUP_FAILED; }
   appleIsrcCache.set(isrc, out);
   return out;
 }
@@ -3425,6 +3447,7 @@ async function enrichTrack(t) {
   const key = `${t.isrc || ''}|${t.artist}|${t.track_name}`;
   if (enrichCache.has(key)) return enrichCache.get(key);
   let out = null;
+  let failed = false;
   try {
     if (!t.isrc) {
       // Used for this render only. Writing it back is backfillIsrcs' job, which
@@ -3436,12 +3459,14 @@ async function enrichTrack(t) {
       // Apple first: exact, and it carries artwork, preview and a real track URL
       // in one answer.
       const ap = await resolveAppleByIsrc(t.isrc);
-      if (ap) out = {
+      if (lookupFailed(ap)) failed = true;
+      else if (ap) out = {
         artwork: ap.artwork, preview: ap.preview,
         appleUrl: ap.appleUrl, exact: true,
       };
       const d = await resolveByIsrc(t.isrc);
-      if (d) out = {
+      if (lookupFailed(d)) failed = true;
+      else if (d) out = {
         artwork: out?.artwork || d.artwork,
         preview: out?.preview || d.preview,
         appleUrl: out?.appleUrl || null,
@@ -3451,7 +3476,8 @@ async function enrichTrack(t) {
     }
     if (!out || !out.artwork || !out.preview) {
       const it = await lookupItunes(t.artist, t.track_name);
-      if (it) out = {
+      if (lookupFailed(it)) failed = true;
+      else if (it) out = {
         artwork: out?.artwork || it.artwork,
         preview: out?.preview || it.preview,
         deezerUrl: out?.deezerUrl || null,
@@ -3459,7 +3485,12 @@ async function enrichTrack(t) {
         exact: out?.exact || it.exact,
       };
     }
-  } catch (e) { console.warn('enrich:', e.message); }
+  } catch (e) { console.warn('enrich:', e.message); failed = true; }
+
+  // A failure is not remembered anywhere - not in this page's map, not in the
+  // shared table - so the next attempt is free to succeed. Only an answer that
+  // came back is worth keeping.
+  if (failed && !out) return LOOKUP_FAILED;
   enrichCache.set(key, out);
   return out;
 }
@@ -3479,7 +3510,7 @@ async function resolveByIsrc(isrc) {
   try {
     const res = await fetch(`${MUSIC_NIGHT_WORKER}/deezer?isrc=${encodeURIComponent(isrc)}`);
     const d = await res.json().catch(() => null);
-    if (!res.ok || d?.error) { console.warn('deezer:', d?.error || res.status); return null; }
+    if (!res.ok || d?.error) { console.warn('deezer:', d?.error || res.status); return LOOKUP_FAILED; }
     if (!d?.found) { isrcCache.set(isrc, null); return null; }
     const out = {
       deezer:  d.deezer,
@@ -3490,7 +3521,7 @@ async function resolveByIsrc(isrc) {
     return out;
   } catch (e) {
     console.warn('isrc resolve:', e.message);
-    return null;
+    return LOOKUP_FAILED;
   }
 }
 
@@ -5312,9 +5343,33 @@ if (_delConfirm) _delConfirm.addEventListener('click', async () => {
   }
 });
 
+// Signing out has to clear what is on DISK, not only what is in memory.
+//
+// The Spotify token is the one that matters. It is granted with
+// playlist-read-private and playlist-read-collaborative, and openSpotifyImport
+// hides the Connect step whenever a token is present without ever asking whose
+// it is. So on a shared phone or laptop: A connects Spotify and signs out, B
+// signs in, opens Import, and is looking at A's private library with a button
+// to copy any of it into B's account. A cannot see that it happened and has no
+// way to revoke it from inside Tunemail.
+//
+// tunemail_pending_copy is the same shape of problem in miniature - a playlist
+// parked from a shared link before signing in would be applied to whoever signs
+// in next.
+//
+// Named, and called from both exits, because a session that simply expires
+// reaches the SIGNED_OUT branch of the listener without passing this button.
+function clearPersonalStorage() {
+  try {
+    ['spotify_token', 'spotify_verifier', 'spotify_verifier_ts', 'tunemail_pending_copy']
+      .forEach(k => localStorage.removeItem(k));
+  } catch (e) { /* private mode, or storage blocked: nothing to clear */ }
+}
+
 document.getElementById('btn-signout').addEventListener('click', async () => {
   closeModal('overlay-account');
   await sbClient.auth.signOut();
+  clearPersonalStorage();
   currentUser = null;
   playlists = [];
   currentPlaylist = null;
@@ -6176,9 +6231,13 @@ async function warmAllArtwork() {
       while (todo.length) {
         const t = todo.shift();
         const d = await enrichTrack(t);
-        await trackLinksCacheSet(t.artist, t.track_name, d && (d.artwork || d.preview)
-          ? { artwork_url: d.artwork || null, preview_url: d.preview || null, enrich_missed_at: null }
-          : { enrich_missed_at: new Date().toISOString() });
+        // Nothing is written for a failed lookup. Writing the miss marker here
+        // is what suppressed the retry for everyone else for a month.
+        if (!lookupFailed(d)) {
+          await trackLinksCacheSet(t.artist, t.track_name, d && (d.artwork || d.preview)
+            ? { artwork_url: d.artwork || null, preview_url: d.preview || null, enrich_missed_at: null }
+            : { enrich_missed_at: new Date().toISOString() });
+        }
         done++;
       }
     };
@@ -6260,9 +6319,12 @@ async function enrichTrackList(container, trackList) {
         if (age < 30 * 24 * 3600 * 1000) continue;
       }
       const data = await enrichTrack(t);
-      paint(i, data);
-      if (data && (data.artwork || data.preview)) fresh.push([t, data]);
-      else missed.push(t);
+      const ok = !lookupFailed(data);
+      paint(i, ok ? data : null);
+      if (ok && data && (data.artwork || data.preview)) fresh.push([t, data]);
+      // A lookup that could not run belongs in neither list: it is not a hit to
+      // save and not a miss to record against this recording for everyone.
+      else if (ok) missed.push(t);
     }
   }
   await Promise.all(Array.from({ length: Math.min(6, trackList.length) }, worker));
@@ -6535,7 +6597,12 @@ function attachAuthListener() {
     if (event === 'SIGNED_IN' && session && !currentUser) {
       await onSignedIn(session.user);
     } else if (event === 'SIGNED_OUT') {
+      // A session that expires on its own arrives here and never touches the
+      // Sign Out button, so the disk clearing has to happen on this path too.
+      clearPersonalStorage();
       currentUser = null;
+      playlists = [];
+      currentPlaylist = null;
       document.getElementById('main-app').classList.remove('active');
       showScreen('signin');
     }
