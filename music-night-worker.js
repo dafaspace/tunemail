@@ -102,14 +102,53 @@ async function verifyUser(request, env) {
 
 // Per-user hourly counter. RECOGNIZE_KV is optional: when the namespace is not
 // bound the worker still works, it just cannot rate-limit.
-async function overRecognizeLimit(env, userId) {
-  if (!env.RECOGNIZE_KV) return false;
-  const key = `recognize:${userId}`;
-  const used = parseInt((await env.RECOGNIZE_KV.get(key)) || '0', 10);
-  if (used >= RECOGNIZE_PER_HOUR) return true;
-  await env.RECOGNIZE_KV.put(key, String(used + 1), { expirationTtl: 3600 });
-  return false;
+// One limiter for every route that costs money or reaches a third party.
+//
+// KV when the namespace is bound, the edge cache when it is not. Be clear about
+// what the fallback is worth: caches.default is per-colo and read-then-write is
+// not atomic, so a determined attacker spreading requests across regions gets
+// more than `limit`. It stops the accidental flood and the casual abuse, which
+// is most of what actually happens, and it is enormously better than the
+// nothing that was here. Bind a KV namespace to make it exact.
+async function overLimit(env, key, limit, seconds) {
+  if (env.RECOGNIZE_KV) {
+    const used = parseInt((await env.RECOGNIZE_KV.get(key)) || '0', 10);
+    if (used >= limit) return true;
+    await env.RECOGNIZE_KV.put(key, String(used + 1), { expirationTtl: seconds });
+    return false;
+  }
+  const url = `https://cache.tunemail/rl/${encodeURIComponent(key)}`;
+  const cache = caches.default;
+  try {
+    const hit = await cache.match(new Request(url));
+    const used = hit ? parseInt(await hit.text(), 10) || 0 : 0;
+    if (used >= limit) return true;
+    await cache.put(
+      new Request(url),
+      new Response(String(used + 1), { headers: { "Cache-Control": `max-age=${seconds}` } })
+    );
+    return false;
+  } catch {
+    // An unavailable cache must not become an open door on a route that spends
+    // money. Refusing is the safe direction here, unlike the alarm cooldown
+    // above, where staying silent is the dangerous one.
+    return true;
+  }
 }
+
+// The paid route keeps its own named wrapper, because the number is a policy
+// and belongs next to the comment that explains it.
+async function overRecognizeLimit(env, userId) {
+  return overLimit(env, `recognize:${userId}`, RECOGNIZE_PER_HOUR, 3600);
+}
+
+// The anonymous lookup routes. These are reachable without an account because a
+// public playlist page must work for a stranger, so the control is per address
+// rather than per user. Generous enough for a 41-track playlist enriching six
+// at a time, tight enough that nobody walks our Deezer and Apple quota away.
+const LOOKUP_PER_MINUTE = 120;
+const clientIp = (request) =>
+  request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
 
 
 // ── GET /p/{slug} - the card a chat app renders ──────────────────────────────
@@ -863,6 +902,19 @@ async function route(request, env, ctx) {
     // already holds it. Nothing secret is returned: the URL is our own, and the
     // rest is delivery health.
     if (request.method === "GET" && url.pathname === "/telegram-status") {
+      // Reading is open: the URL reported is our own and the rest is delivery
+      // health. REPAIRING is not - it calls Telegram's API, and an endpoint that
+      // reaches a third party on an anonymous GET is a free amplifier. The key
+      // is the webhook secret, which is the thing this repair is about anyway,
+      // so no new binding has to be created and remembered.
+      const wantsRepair =
+        url.searchParams.get("force") === "1" || url.searchParams.get("fix") === "1";
+      if (wantsRepair) {
+        const key = url.searchParams.get("key") || "";
+        if (!env.TELEGRAM_WEBHOOK_SECRET || key !== env.TELEGRAM_WEBHOOK_SECRET) {
+          return json({ error: "Repair needs the webhook secret as ?key=" }, 403, cors());
+        }
+      }
       const info = await telegramWebhookInfo(env);
       if (!info.ok) return json({ error: info.detail }, 502, cors());
       const i = info.info || {};
@@ -890,7 +942,11 @@ async function route(request, env, ctx) {
           lastErrorAt: i.last_error_date
             ? new Date(i.last_error_date * 1000).toISOString()
             : null,
-          hasSecret: !!i.has_custom_certificate || undefined,
+          // Telegram never reports the secret back, so nothing here can. This
+          // is the CERTIFICATE flag and used to be returned under a name that
+          // said secret - during the one investigation this endpoint exists for,
+          // which is "is the stored secret stale".
+          hasCustomCertificate: !!i.has_custom_certificate,
           repaired,
         },
         200,
@@ -926,11 +982,18 @@ async function route(request, env, ctx) {
       );
     }
 
-    if (request.method === "GET" && url.pathname === "/resolve") {
-      return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
-    }
-
-    if (request.method === "GET" && url.pathname === "/deezer") {
+    // The three lookup routes share one per-address budget rather than three,
+    // because they are one activity: opening a playlist calls all of them.
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/resolve" || url.pathname === "/deezer")
+    ) {
+      if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
+        return json({ error: "Too many lookups" }, 429, cors());
+      }
+      if (url.pathname === "/resolve") {
+        return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
+      }
       const byId = url.searchParams.get("id");
       return byId
         ? deezerById(byId, ctx)
@@ -938,6 +1001,9 @@ async function route(request, env, ctx) {
     }
 
     if (request.method === "GET" && url.pathname === "/isrc-find") {
+      if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
+        return json({ error: "Too many lookups" }, 429, cors());
+      }
       return isrcFind(url.searchParams, ctx);
     }
 
@@ -1007,8 +1073,20 @@ async function route(request, env, ctx) {
         return json({ error: "Bad request" }, 400, cors());
       }
 
-      const { feedback_id, type, message, user_name, app, screenshot_url } = body;
+      const { feedback_id, type, app, screenshot_url } = body;
       if (app !== "music-night") return json({ error: "Bad request" }, 400, cors());
+
+      // Telegram rejects a message over 4096 characters outright, so an
+      // uncapped body did not produce a huge notification - it produced no
+      // notification at all, and the client swallowed the failure. Cut here so
+      // the report still arrives, shortened.
+      const message = String(body.message ?? "").slice(0, 3000);
+      const user_name = String(body.user_name ?? "").slice(0, 80);
+
+      // One account could otherwise drive the owner's phone as a siren.
+      if (await overLimit(env, `feedback:${user.id}`, 10, 3600)) {
+        return json({ error: "Too much feedback in the last hour" }, 429, cors());
+      }
       if (!/^[a-f0-9-]{36}$/.test(String(feedback_id || ""))) {
         return json({ error: "Bad request" }, 400, cors());
       }
