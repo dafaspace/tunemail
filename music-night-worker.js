@@ -6,10 +6,32 @@ const SUPABASE_URL = 'https://rqruaqoecvpythbvnozf.supabase.co';
 // most powerful secret ended up on the busiest route.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxcnVhcW9lY3ZweXRoYnZub3pmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyOTY4OTEsImV4cCI6MjA5MTg3Mjg5MX0.3yw1LEN2mvZMg1PXA_IvE0DmNbh4TXNP2uyWRFFJNQo';
 
-// Only the deployed app talks to this worker. Note that CORS is a browser-side
+// Only our own front ends talk to this worker. Note that CORS is a browser-side
 // control and stops nothing outside a browser, so every route that costs money
 // or writes data checks a bearer as well.
+//
+// MEASURED on a real simulator build, 14 Sep 2026: the Capacitor webview's
+// origin is `capacitor://localhost` on iOS and `https://localhost` on Android,
+// NOT the site address. With a single hard-coded value here, every worker call
+// from the shipping app failed with "Load failed" - both a plain GET and a
+// preflighted one - which silently took out account deletion, feedback and ISRC
+// lookup on device while everything kept working in the browser. Account
+// deletion is required by App Store 5.1.1(v), so this was a rejection waiting
+// to happen that no amount of testing on the web would have found.
 const ALLOWED_ORIGIN = 'https://tunemail.app';
+const ALLOWED_ORIGINS = new Set([
+  ALLOWED_ORIGIN,
+  'capacitor://localhost',   // iOS build
+  'https://localhost',       // Android build
+  'http://localhost:3000',   // the local server used while developing
+]);
+
+// An allowlist, never a reflection of whatever arrived: echoing an unknown
+// Origin back would let any page on the internet read these responses.
+const allowedOrigin = (request) => {
+  const o = request && request.headers ? request.headers.get("Origin") : null;
+  return ALLOWED_ORIGINS.has(o) ? o : ALLOWED_ORIGIN;
+};
 
 // AudD rejects anything larger, and there is no point paying to find out.
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
@@ -808,7 +830,25 @@ export default {
     })());
   },
 
+  // Every response leaves through here so the Allow-Origin header is decided
+  // once, from the request that actually arrived, rather than at each of the
+  // seventeen places a response is built. Those all call cors() with no
+  // argument and always will; this is what makes that harmless.
   async fetch(request, env, ctx) {
+    const res = await route(request, env, ctx);
+    const origin = allowedOrigin(request);
+    if (res.headers.get("Access-Control-Allow-Origin") === origin) return res;
+    const headers = new Headers(res.headers);
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Vary", "Origin");
+    // A 101/204/304 body cannot be reconstructed, and their headers are already
+    // set; rebuilding them throws.
+    if (res.status === 101 || res.status === 204 || res.status === 304) return res;
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  },
+};
+
+async function route(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === "POST" && url.pathname === "/delete-account") {
@@ -1157,8 +1197,7 @@ export default {
     }
 
     return new Response("Not found", { status: 404, headers: cors() });
-  },
-};
+}
 
 // System alarms, as opposed to notifyOwner's replies to something the owner
 // just did. Both land in the chat users write feedback into, so the two have to
