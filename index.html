@@ -2692,15 +2692,40 @@ document.getElementById('btn-reset').addEventListener('click', async () => {
   const btn = document.getElementById('btn-reset');
   const label = btn.textContent;
   btn.textContent = '…'; btn.disabled = true;
+
+  let saved = null;
   try {
-    const { data, error } = await sbClient.auth.updateUser({ password: p1 });
-    if (error) throw error;
-    showToast('Password updated');
-    // The recovery link already opened a session, so this signs them straight in.
-    await onSignedIn(data.user);
+    // A request that hangs rather than fails leaves the button on "…" for ever
+    // and never reaches the catch, which looks exactly like a slow success. The
+    // race gives it an end: twenty seconds is longer than any honest round trip
+    // and short enough that nobody has walked away yet.
+    saved = await Promise.race([
+      sbClient.auth.updateUser({ password: p1 }),
+      new Promise((_, rej) => setTimeout(
+        () => rej(new Error('That took too long. Check your connection and try again.')), 20000)),
+    ]);
+    if (saved.error) throw saved.error;
   } catch (err) {
     showAuthError('reset-error', err.message || 'Could not save the password.');
     btn.textContent = label; btn.disabled = false;
+    return;
+  }
+
+  // Outside the try, deliberately. The password is already changed by this
+  // point, so anything that goes wrong from here is a problem with opening the
+  // app - and reporting it as "could not save the password" tells someone their
+  // password did not change when it did, which is the worst thing this screen
+  // can say.
+  showToast('Password updated');
+  try {
+    await onSignedIn(saved.data.user);
+  } catch (err) {
+    console.warn('post-reset sign-in:', err.message);
+    btn.textContent = label; btn.disabled = false;
+    // The message goes on the screen they are about to be on, not the one they
+    // are leaving - an error painted onto #screen-reset is an error nobody sees.
+    showScreen('signin');
+    showAuthError('signin-error', 'Password saved. Sign in with your new password.');
   }
 });
 
@@ -2807,7 +2832,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v73';
+const APP_BUILD = 'v74';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5156,6 +5181,47 @@ document.getElementById('btn-signup').addEventListener('click', async () => {
       options: { data: { display_name: name } }
     });
     if (error) throw error;
+
+    // Signing up with an address that already has an account does NOT fail.
+    // With email-enumeration protection on - which is the right setting, since
+    // an error here would let anyone test which addresses are registered -
+    // Supabase answers 200 with a FABRICATED user: a random id, created_at and
+    // confirmation_sent_at both stamped now, and no email sent. The only tell
+    // is that its identities array is empty.
+    //
+    // Two things went wrong because this was not checked. The person was told a
+    // link was on its way and waited for a letter that was never sent. And the
+    // profiles write below ran with that invented id, leaving a row belonging to
+    // nobody behind every duplicate attempt.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setLoading('btn-signup', false);
+      showAuthError('signup-error', 'An account already exists for that address.');
+      // Both ways forward, with the address carried over, because the person
+      // who lands here either knows their password or does not, and making them
+      // retype it in the next form is the last thing they need.
+      document.getElementById('signin-email').value = email;
+      document.getElementById('forgot-email').value = email;
+      const err = document.getElementById('signup-error');
+      if (err && !err.querySelector('.auth-error-actions')) {
+        const row = document.createElement('div');
+        row.className = 'auth-error-actions';
+        row.style.cssText = 'margin-top:8px;display:flex;gap:14px';
+        const mk = (label, screen) => {
+          const a = document.createElement('button');
+          a.type = 'button';
+          a.className = 'auth-error-link';
+          a.style.cssText = 'background:none;border:none;padding:0;font:inherit;color:var(--primary-text);cursor:pointer;text-decoration:underline';
+          a.textContent = label;
+          a.addEventListener('click', () => showScreen(screen));
+          return a;
+        };
+        row.appendChild(mk('Sign in', 'signin'));
+        row.appendChild(mk('Forgot password', 'forgot'));
+        err.appendChild(row);
+      }
+      return;
+    }
+
     // Save display name to profiles table
     if (data.user) {
       await sbClient.from('profiles').upsert({
@@ -6452,6 +6518,29 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
   window.location.href = window.location.pathname;
 });
 
+// Pressing Sign In does not sign anyone in by itself: signInWithPassword sets
+// the session and the TRANSITION is done by this listener. So any path through
+// the init that shows the sign-in form and returns without calling this leaves
+// a form whose button appears to do nothing at all. It is a named function for
+// exactly that reason - three paths reach the sign-in screen and each has to
+// attach it, and a fourth path added later has one obvious thing to copy.
+let _authListenerAttached = false;
+function attachAuthListener() {
+  if (_authListenerAttached || !sbClient) return;
+  _authListenerAttached = true;
+  sbClient.auth.onAuthStateChange(async (event, session) => {
+    // Skip if we're handling Spotify callback — it manages its own flow
+    if (new URLSearchParams(window.location.search).get('state') === 'spotify_import') return;
+    if (event === 'SIGNED_IN' && session && !currentUser) {
+      await onSignedIn(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      document.getElementById('main-app').classList.remove('active');
+      showScreen('signin');
+    }
+  });
+}
+
 // ── Init (IIFE) ───────────────────────────────────────────────────────
 (async () => {
   // Hide all screens while loading
@@ -6459,6 +6548,50 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
 
   // Check for public playlist slug
   const params = new URLSearchParams(window.location.search);
+
+  // A REFUSED link, before anything else and before the client exists.
+  //
+  // When Supabase turns down a recovery or confirmation link it does not send
+  // an error to a different place - it sends error / error_code /
+  // error_description to the SAME place the tokens would have gone, with no
+  // tokens and no type. So none of the branches below match, the init falls
+  // through to "no session", and someone who pressed "reset my password" is
+  // shown a form asking for the password they do not have, with no explanation.
+  //
+  // Why it happens more than it should: these tokens are single use, and mail
+  // providers and security scanners FETCH links to check them before the person
+  // ever taps. The scan spends the token. "It worked once and never again" is
+  // the ordinary presentation of this, not a rare one.
+  //
+  // Read from both places because the format depends on the flow, and before
+  // createClient because detectSessionInUrl strips the fragment on its way past.
+  {
+    const frag = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const code = params.get('error_code') || frag.get('error_code');
+    const err  = params.get('error') || frag.get('error');
+    if (code || err) {
+      const expired = /expired|otp_expired/i.test(code || '');
+      sbClient = window.supabase.createClient(SB_URL, SB_KEY, {
+        auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false }
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+      showScreen('signin');
+      showAuthError('signin-error', expired
+        ? 'That link has already been used or has expired. Links work once, and some mail apps open them to check them.'
+        : 'That link could not be used. Ask for a new one.');
+      const box = document.getElementById('signin-error');
+      if (box) {
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.style.cssText = 'display:block;margin-top:8px;background:none;border:none;padding:0;font:inherit;color:var(--primary-text);cursor:pointer;text-decoration:underline';
+        again.textContent = 'Send me a new link';
+        again.addEventListener('click', () => showScreen('forgot'));
+        box.appendChild(again);
+      }
+      attachAuthListener();
+      return;
+    }
+  }
 
   // Handle user profile (?u=username)
   const profileUsername = params.get('u');
@@ -6483,7 +6616,10 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
       await onSignedIn(session.user);
       await handleSpotifyCallback(spotifyCode);
     } else {
+      // Same trap as the refused-link branch above: this shows the sign-in form
+      // and returns, so without the listener the button would do nothing.
       showScreen('signin');
+      attachAuthListener();
     }
     return;
   }
@@ -6555,6 +6691,7 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
         ? 'That reset link did not work: ' + err.message
         : 'Email confirmation failed: ' + err.message);
       showScreen('signin');
+      attachAuthListener();
       return;
     }
   }
@@ -6567,18 +6704,7 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
     showScreen('signin');
   }
 
-  // Listen for auth state changes
-  sbClient.auth.onAuthStateChange(async (event, session) => {
-    // Skip if we're handling Spotify callback — it manages its own flow
-    if (new URLSearchParams(window.location.search).get('state') === 'spotify_import') return;
-    if (event === 'SIGNED_IN' && session && !currentUser) {
-      await onSignedIn(session.user);
-    } else if (event === 'SIGNED_OUT') {
-      currentUser = null;
-      document.getElementById('main-app').classList.remove('active');
-      showScreen('signin');
-    }
-  });
+  attachAuthListener();
 })();
 </script>
 
