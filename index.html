@@ -2885,7 +2885,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v82';
+const APP_BUILD = 'v83';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4790,10 +4790,23 @@ const SHAZAM = (() => {
 })();
 
 const RECOGNISER = SHAZAM ? 'shazam' : (AUDD_ENABLED ? 'audd' : null);
+
+// Adding to the listener's OWN Apple Music library, which is the one thing
+// Shazam did that we could not. Native builds only, iOS 16+, and only for
+// someone with an Apple Music subscription who grants access - so it is offered
+// rather than assumed, and its absence must never look like a failure to hear
+// the song. Resolved the same way as the recogniser, for the same reason:
+// registerPlugin is not always on the injected global.
+const APPLE_MUSIC = (() => {
+  const C = window.Capacitor;
+  if (!C || !C.isNativePlatform?.() || !C.isPluginAvailable?.('AppleMusic')) return null;
+  try { return C.Plugins?.AppleMusic || C.registerPlugin?.('AppleMusic') || null; } catch { return null; }
+})();
 // Beside the build line, and for the same reason: the first question any report
 // of "the listen button is missing" raises is which engine this build thinks it
 // has, and that is otherwise unanswerable from the outside.
 console.log(`[tunemail] recogniser: ${RECOGNISER || 'none'}`);
+
 
 
 
@@ -4990,18 +5003,30 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
         } else {
           auddStatus(pick(RECOGNISE_WIN));
           setTimeout(() => auddStatus(''), 4000);
-          // Undo, because a save nobody confirmed needs a way back that does
-          // not involve finding the playlist and deleting a row by hand.
-          showToast(`Added to ${HEARD_PLAYLIST} - ${what}`, 6000, {
-            label: 'Undo',
-            onClick: async () => {
-              try {
-                await sbClient.from('playlist_tracks').delete().eq('id', saved.id);
-                await loadPlaylists();
-                showToast('Removed');
-              } catch (err) { showToast('Could not undo: ' + err.message); }
-            },
-          });
+          // Two different offers, and which one appears depends on what this
+          // build and this person can actually do.
+          //
+          // With Apple Music reachable and an ISRC in hand, the second tap is
+          // worth offering: it puts the song in the library they actually
+          // listen with, which is what Shazam does and what a link does not.
+          // Without it, the only thing worth offering is Undo.
+          const canAdd = !!(APPLE_MUSIC && r.isrc);
+          showToast(`Added to ${HEARD_PLAYLIST} - ${what}`, canAdd ? 8000 : 6000,
+            canAdd ? {
+              label: 'Also to Apple Music',
+              onClick: () => addToAppleMusic(r),
+            } : {
+              // Undo, because a save nobody confirmed needs a way back that
+              // does not involve finding the playlist and deleting a row.
+              label: 'Undo',
+              onClick: async () => {
+                try {
+                  await sbClient.from('playlist_tracks').delete().eq('id', saved.id);
+                  await loadPlaylists();
+                  showToast('Removed');
+                } catch (err) { showToast('Could not undo: ' + err.message); }
+              },
+            });
         }
       } catch (err) {
         // Recognition worked; only the saving failed. Say which, or the person
@@ -5023,6 +5048,33 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
     _recBtn.classList.remove('recording');
   }
 });
+
+// Asks for permission at the moment it is needed and not before. A music
+// permission dialog on first launch, before the app has done anything for
+// anyone, is the fastest way to be refused for ever.
+async function addToAppleMusic(r) {
+  if (!APPLE_MUSIC || !r?.isrc) return;
+  try {
+    const st = await APPLE_MUSIC.status();
+    if (!st?.available) { showToast('Adding to Apple Music needs iOS 16 or later'); return; }
+    if (!st.authorized) {
+      const granted = await APPLE_MUSIC.authorize();
+      if (!granted?.authorized) {
+        showToast('Apple Music access was not granted');
+        return;
+      }
+    }
+    showToast('Adding to Apple Music…', 4000);
+    const res = await APPLE_MUSIC.addByIsrc({ isrc: r.isrc });
+    if (res?.added) showToast('In your Apple Music library');
+    // Not in Apple's catalogue is an ordinary outcome, not a fault, and it is
+    // said as such - the track is still saved in Heard either way.
+    else if (res?.reason === 'notInCatalog') showToast('Not in the Apple Music catalogue');
+    else showToast('Could not add to Apple Music');
+  } catch (e) {
+    showToast(e?.message || 'Could not add to Apple Music');
+  }
+}
 
 // ── AudD ─────────────────────────────────────────────────────────────
 const _auddBtn = RECOGNISER === 'audd' ? _recBtn : null;

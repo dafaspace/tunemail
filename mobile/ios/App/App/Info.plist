@@ -50,6 +50,11 @@
 	     problems. The library key is belt and braces: the modern out-of-process
 	     picker does not require it, older paths do.
 	     Both must go if the screenshot attachment ever goes. -->
+	<!-- MusicKit prompts with this before it will let the app touch the
+	     listener's Apple Music library. Nothing is read: the only call made is
+	     adding one song the person just identified. -->
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Add songs you identify straight to your Apple Music library, so they are waiting for you in the app you already listen with.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach to your feedback, so a problem can be seen rather than described.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

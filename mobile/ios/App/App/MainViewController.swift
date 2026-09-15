@@ -18,5 +18,6 @@ import UIKit
 class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(ShazamPlugin())
+        bridge?.registerPluginInstance(AppleMusicPlugin())
     }
 }
