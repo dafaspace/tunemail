@@ -2844,7 +2844,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v77';
+const APP_BUILD = 'v78';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -6016,7 +6016,22 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
     name: currentPlaylist.name,
     description: currentPlaylist.description || '',
     exported_at: new Date().toISOString(),
-    tracks: tracks.map(t => ({ artist: t.artist, track_name: t.track_name, genre: t.genre || '' }))
+    // The ISRC goes out with the file. It used not to, and that made the round
+    // trip lossy in the one field the importer's own comment calls the single
+    // most valuable column there is: export a playlist, import it back, and
+    // every exact link has to be guessed again from the name - which is the
+    // step measured to accept 5 wrong recordings out of 35. Everything here is
+    // a field parseCSV already knows how to read back.
+    tracks: tracks.map(t => ({
+      artist: t.artist,
+      track_name: t.track_name,
+      album: t.album || '',
+      isrc: t.isrc || '',
+      duration_ms: t.duration_ms || null,
+      spotify_uri: t.spotify_uri || '',
+      release_date: t.release_date || '',
+      genre: t.genre || '',
+    }))
   };
   const filename = (currentPlaylist.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'playlist') + '.json';
   downloadFile(filename, JSON.stringify(payload, null, 2), 'application/json');
@@ -6026,11 +6041,15 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
 document.getElementById('btn-export-csv').addEventListener('click', async () => {
   if (!currentPlaylist) return;
   const tracks = await getTracksForExport(currentPlaylist.id);
-  const rows = ['artist,track_name,genre', ...tracks.map(t =>
-    [`"${(t.artist||'').replace(/"/g,'""')}"`,
-     `"${(t.track_name||'').replace(/"/g,'""')}"`,
-     `"${(t.genre||'').replace(/"/g,'""')}"`].join(',')
-  )];
+  // Header names chosen to match what parseCSV looks for, so this file imports
+  // back into Tunemail - and into Soundiiz and Spotlistr, which read the same
+  // Spotify-shaped column names.
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = ['artist,track name,album,isrc,duration (ms),spotify uri,release date,genre',
+    ...tracks.map(t => [
+      q(t.artist), q(t.track_name), q(t.album), q(t.isrc),
+      q(t.duration_ms ?? ''), q(t.spotify_uri), q(t.release_date), q(t.genre),
+    ].join(','))];
   const filename = (currentPlaylist.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'playlist') + '.csv';
   downloadFile(filename, rows.join('\n'), 'text/csv');
   showToast('CSV exported');
