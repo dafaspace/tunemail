@@ -260,9 +260,16 @@ async function lookupByIsrc(kind, isrc, env, ctx, debugKey) {
 
   const token = await appToken(kind, env);
   if (!token) {
-    // The reason is attached only for a caller who already holds a secret of
-    // ours. Everyone else gets the same three words as before.
-    const maySee = !!env.TELEGRAM_WEBHOOK_SECRET && debugKey === env.TELEGRAM_WEBHOOK_SECRET;
+    // Gated on DEBUG_KEY, a value the owner sets himself and deletes afterwards.
+    //
+    // It was gated on TELEGRAM_WEBHOOK_SECRET first, which was useless: a
+    // Cloudflare secret cannot be read back, so the only person entitled to the
+    // diagnostic was the one person who could not produce the key. Same trap
+    // this file already warns about for the AudD token, walked into anyway.
+    //
+    // No DEBUG_KEY set means no diagnostic, so leaving it unset is the safe
+    // resting state and deleting it afterwards restores that.
+    const maySee = !!env.DEBUG_KEY && debugKey === env.DEBUG_KEY;
     return j(maySee ? { error: "not configured", why: lastTokenError[kind] } : { error: "not configured" }, 503);
   }
 
