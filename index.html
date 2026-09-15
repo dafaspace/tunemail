@@ -2900,7 +2900,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v86';
+const APP_BUILD = 'v87';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3679,8 +3679,48 @@ function mergeExactLinks(track, enriched) {
   return out;
 }
 
+// Which four to show, when we can show only four.
+//
+// It used to be the first four of a fixed list, and after the ISRC pipeline
+// grew that became actively wrong: measured on the shared JAZZ playlist, the
+// visible four were Spotify, Apple, YouTube and Bandcamp - and Bandcamp can
+// never be exact, while Deezer and Tidal, which we now resolve exactly by ISRC,
+// were hidden behind "+ More". The app was showing a guess and hiding a
+// certainty.
+//
+// Exact first, in the list's own order within each group, so the order is
+// stable for a given track and never shuffles between renders. A person who
+// taps the first button should land on the recording, not on a search for it.
+function orderPlatforms(list, hrefFor) {
+  const exact = [], search = [];
+  for (const p of list) (isExactHref(hrefFor(p)) ? exact : search).push(p);
+  return exact.concat(search);
+}
+
+function isExactHref(href) {
+  return !!href && !href.includes('/search') && !href.includes('q=') &&
+         !href.includes('term=') && !href.includes('text=') && !href.includes('query=');
+}
+
 function buildPlatformLinksHtml(artist, trackName, odesliLinks, showAll = false, directUrls = null) {
-  const list = showAll ? STREAMING_PLATFORMS : STREAMING_PLATFORMS.slice(0, TOP_PLATFORMS);
+  // Resolve every platform's href first, then decide which four are worth the
+  // space. Doing it the other way round is what hid the exact ones.
+  const hrefFor = (p) => {
+    if (directUrls) {
+      const k = ODESLI_PLATFORM_MAP_REVERSE[p.id];
+      if (k && directUrls[k]) return directUrls[k];
+      if (directUrls[p.id]) return directUrls[p.id];
+    }
+    if (odesliLinks) {
+      if (odesliLinks[p.id]) return odesliLinks[p.id];
+      for (const [oKey, mKey] of Object.entries(ODESLI_PLATFORM_MAP || {})) {
+        if (mKey === p.id && odesliLinks[oKey]) return odesliLinks[oKey];
+      }
+    }
+    return null;
+  };
+  const ordered = orderPlatforms(STREAMING_PLATFORMS, hrefFor);
+  const list = showAll ? ordered : ordered.slice(0, TOP_PLATFORMS);
   return list.map(p => {
     let href = null;
     // 1. Direct URLs from saved odesli data (most accurate)
