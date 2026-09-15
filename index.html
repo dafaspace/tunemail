@@ -2286,6 +2286,7 @@ button {
             <span style="font-size:28px"><svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 3.9A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg></span>
             <span style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:var(--muted)">Drop CSV here or tap to browse</span>
             <input type="file" id="csv-file-input" accept=".csv" style="display:none" />
+            <p id="csv-isrc-note" style="display:none;font-size:12px;line-height:1.5;margin-top:8px"></p>
           </label>
           <div id="csv-file-name" style="font-size:12px;color:#a78bfa;margin-top:8px;display:none"></div>
         </div>
@@ -2856,7 +2857,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v79';
+const APP_BUILD = 'v80';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5923,14 +5924,64 @@ function renderImportPreview(tracks) {
 document.getElementById('csv-drop-zone').addEventListener('click', () => {
   document.getElementById('csv-file-input').click();
 });
+
+// Both the file input and the drop zone did this, and both did it with
+// textContent holding SVG source - so the chosen file appeared on screen as the
+// literal characters <svg class="g" width="1em" ...> followed by its name.
+//
+// It also now says how many rows arrived WITH AN ISRC, which is the number that
+// decides the quality of everything downstream. A track that brings one gets an
+// exact link on every platform immediately; a track without one has to be
+// matched by name and duration, and that path was measured accepting 5 wrong
+// recordings out of 35 before the duration gate went in. The person choosing
+// the file is the only one who can do anything about it, and only at this
+// moment, so this is where it is said.
+//
+// Verified by reading their source and their own pages, 15 Sep 2026: Exportify
+// writes an `ISRC` column (last field of TracksBaseData, header spelled exactly
+// "ISRC") and Spotlistr lists ISRC among its exported fields. TuneMyMusic's
+// export page enumerates its format and does not mention it. Soundiiz could not
+// be checked - both of its documentation pages answered 404.
+function showChosenFile(file, text) {
+  const nameEl = document.getElementById('csv-file-name');
+  if (nameEl) {
+    nameEl.textContent = '';
+    nameEl.insertAdjacentHTML('afterbegin', CSV_FILE_ICON);
+    nameEl.appendChild(document.createTextNode(' ' + file.name));
+    nameEl.style.display = '';
+  }
+
+  const tracks = parseCSV(text);
+
+  const note = document.getElementById('csv-isrc-note');
+  if (note) {
+    const withIsrc = tracks.filter(t => t.isrc).length;
+    if (!tracks.length) {
+      note.style.display = 'none';
+    } else if (withIsrc === tracks.length) {
+      note.textContent = `All ${tracks.length} tracks carry an ISRC, so every link will be exact.`;
+      note.style.color = 'var(--muted)';
+      note.style.display = '';
+    } else if (withIsrc) {
+      note.textContent = `${withIsrc} of ${tracks.length} tracks carry an ISRC. The rest are matched by name, which is less certain.`;
+      note.style.color = 'var(--muted)';
+      note.style.display = '';
+    } else {
+      note.textContent = 'No ISRC column in this file, so every track has to be matched by name. Exportify and Spotlistr both include one.';
+      note.style.color = '#f0b849';
+      note.style.display = '';
+    }
+  }
+  return tracks;
+}
+const CSV_FILE_ICON = '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+
 document.getElementById('csv-file-input').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    document.getElementById('csv-file-name').textContent = '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> ' + file.name;
-    document.getElementById('csv-file-name').style.display = '';
-    importedTracks = parseCSV(ev.target.result);
+    importedTracks = showChosenFile(file, ev.target.result);
     renderImportPreview(importedTracks);
   };
   reader.readAsText(file, 'UTF-8');
@@ -5951,9 +6002,7 @@ document.getElementById('csv-drop-zone').addEventListener('drop', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    document.getElementById('csv-file-name').textContent = '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg> ' + file.name;
-    document.getElementById('csv-file-name').style.display = '';
-    importedTracks = parseCSV(ev.target.result);
+    importedTracks = showChosenFile(file, ev.target.result);
     renderImportPreview(importedTracks);
   };
   reader.readAsText(file, 'UTF-8');
