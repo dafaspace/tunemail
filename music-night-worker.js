@@ -173,6 +173,12 @@ const clientIp = (request) =>
 // must never live here.
 const appTokens = { spotify: null, tidal: null };
 
+// Why this reports instead of returning null: it failed for BOTH providers at
+// once and swallowed the reason, which left nothing to act on but guesses. The
+// detail never reaches an ordinary caller - only a request carrying the webhook
+// secret sees it - and it never contains the credential itself, only its shape.
+let lastTokenError = { spotify: null, tidal: null };
+
 async function appToken(kind, env) {
   const now = Date.now();
   const held = appTokens[kind];
@@ -180,23 +186,58 @@ async function appToken(kind, env) {
   // authentication bug and is miserable to find.
   if (held && held.value && held.expires > now + 60000) return held.value;
 
+  // Trimmed, because a secret pasted into a dashboard field very often carries
+  // a trailing newline, and Basic auth built from it fails with a message about
+  // the client rather than about whitespace.
+  const clean = (v) => (typeof v === "string" ? v.trim() : v);
   const conf = kind === "spotify"
-    ? { url: "https://accounts.spotify.com/api/token", id: env.SPOTIFY_CLIENT_ID, secret: env.SPOTIFY_CLIENT_SECRET }
-    : { url: "https://auth.tidal.com/v1/oauth2/token", id: env.TIDAL_CLIENT_ID, secret: env.TIDAL_CLIENT_SECRET };
-  if (!conf.id || !conf.secret) return null;
+    ? { url: "https://accounts.spotify.com/api/token", id: clean(env.SPOTIFY_CLIENT_ID), secret: clean(env.SPOTIFY_CLIENT_SECRET) }
+    : { url: "https://auth.tidal.com/v1/oauth2/token", id: clean(env.TIDAL_CLIENT_ID), secret: clean(env.TIDAL_CLIENT_SECRET) };
 
-  const body = new URLSearchParams({ grant_type: "client_credentials" });
-  const res = await fetch(conf.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${conf.id}:${conf.secret}`)}`,
-    },
-    body,
-  });
-  if (!res.ok) return null;
-  const j = await res.json().catch(() => null);
-  if (!j?.access_token) return null;
+  if (!conf.id || !conf.secret) {
+    lastTokenError[kind] = { stage: "missing", hasId: !!conf.id, hasSecret: !!conf.secret };
+    return null;
+  }
+
+  let res;
+  try {
+    res = await fetch(conf.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${conf.id}:${conf.secret}`)}`,
+      },
+      body: new URLSearchParams({ grant_type: "client_credentials" }),
+    });
+  } catch (e) {
+    lastTokenError[kind] = { stage: "unreachable", detail: String(e).slice(0, 200), url: conf.url };
+    return null;
+  }
+
+  const text = await res.text();
+  if (!res.ok) {
+    lastTokenError[kind] = {
+      stage: "refused",
+      status: res.status,
+      // The provider's own words. They say "invalid_client" or "unsupported
+      // grant type", which is the difference between a wrong secret and a wrong
+      // endpoint, and guessing between those two cost a deploy already.
+      body: text.slice(0, 300),
+      url: conf.url,
+      idLength: conf.id.length,
+      secretLength: conf.secret.length,
+    };
+    return null;
+  }
+
+  let j = null;
+  try { j = JSON.parse(text); } catch { /* handled below */ }
+  if (!j?.access_token) {
+    lastTokenError[kind] = { stage: "no-token", body: text.slice(0, 300), url: conf.url };
+    return null;
+  }
+
+  lastTokenError[kind] = null;
   appTokens[kind] = {
     value: j.access_token,
     expires: now + (Number(j.expires_in) || 3600) * 1000,
@@ -204,7 +245,7 @@ async function appToken(kind, env) {
   return j.access_token;
 }
 
-async function lookupByIsrc(kind, isrc, env, ctx) {
+async function lookupByIsrc(kind, isrc, env, ctx, debugKey) {
   const j = (data, status = 200) => new Response(JSON.stringify(data), {
     status,
     headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": "public, max-age=86400" },
@@ -218,7 +259,12 @@ async function lookupByIsrc(kind, isrc, env, ctx) {
   if (hit) return hit;
 
   const token = await appToken(kind, env);
-  if (!token) return j({ error: "not configured" }, 503);
+  if (!token) {
+    // The reason is attached only for a caller who already holds a secret of
+    // ours. Everyone else gets the same three words as before.
+    const maySee = !!env.TELEGRAM_WEBHOOK_SECRET && debugKey === env.TELEGRAM_WEBHOOK_SECRET;
+    return j(maySee ? { error: "not configured", why: lastTokenError[kind] } : { error: "not configured" }, 503);
+  }
 
   const url = kind === "spotify"
     ? `https://api.spotify.com/v1/search?q=${encodeURIComponent(`isrc:${isrc}`)}&type=track&limit=1`
@@ -1142,10 +1188,10 @@ async function route(request, env, ctx) {
         return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
       }
       if (url.pathname === "/spotify") {
-        return lookupByIsrc("spotify", url.searchParams.get("isrc") || "", env, ctx);
+        return lookupByIsrc("spotify", url.searchParams.get("isrc") || "", env, ctx, url.searchParams.get("key"));
       }
       if (url.pathname === "/tidal") {
-        return lookupByIsrc("tidal", url.searchParams.get("isrc") || "", env, ctx);
+        return lookupByIsrc("tidal", url.searchParams.get("isrc") || "", env, ctx, url.searchParams.get("key"));
       }
       const byId = url.searchParams.get("id");
       return byId
