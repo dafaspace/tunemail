@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ reads this instead of allowBackup. Both are set, because a
+     device on an older API level only understands allowBackup.
+
+     Nothing leaves the device. The app's storage holds the Supabase refresh
+     token and, when Spotify is connected, an OAuth access token carrying
+     playlist-read-private. Auto-backup would copy both to the user's Google
+     account and restore them onto a new phone, which is a silent way for a
+     session to outlive the device it was granted on. -->
+<data-extraction-rules>
+  <cloud-backup>
+    <exclude domain="root" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="file" />
+  </cloud-backup>
+  <device-transfer>
+    <exclude domain="root" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="file" />
+  </device-transfer>
+</data-extraction-rules>

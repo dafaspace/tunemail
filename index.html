@@ -2,7 +2,11 @@
 <html lang="en" class="booting">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <!-- viewport-fit=cover is not decoration: without it iOS resolves every
+       env(safe-area-inset-*) to ZERO, and this file has seven rules that depend
+       on them. So the home indicator and the notch were being allowed for in CSS
+       that could never fire, in exactly the builds the insets exist for. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Tunemail</title>
   <!-- The manifest does not cover iOS; this is what a home-screen shortcut uses. -->
   <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
@@ -2840,7 +2844,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v76';
+const APP_BUILD = 'v77';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4722,6 +4726,7 @@ const RECOGNISER = SHAZAM ? 'shazam' : (AUDD_ENABLED ? 'audd' : null);
 console.log(`[tunemail] recogniser: ${RECOGNISER || 'none'}`);
 
 
+
 // Removed rather than hidden: a hidden control is still reachable by keyboard
 // and by a screen reader, and "Identify the song playing nearby" that does
 // nothing is worse than no button.
@@ -5168,7 +5173,17 @@ function updateProfileLink(username) {
   const linkDiv = document.getElementById('account-profile-link');
   const linkEl = document.getElementById('account-profile-url');
   linkEl.href = url;
-  linkEl.textContent = `<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg> music-night/?u=${username}`;
+  // textContent with markup in it prints the markup. The account panel has been
+  // showing the literal characters `<svg class="g" width="1em" ...>` followed by
+  // the link, and the old project name with it. Built as nodes: the icon is
+  // markup, the username is text, and neither has to trust the other.
+  linkEl.textContent = '';
+  linkEl.insertAdjacentHTML('afterbegin',
+    '<svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>' +
+    '<path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>');
+  linkEl.appendChild(document.createTextNode(` tunemail.app/?u=${username}`));
   linkDiv.style.display = '';
 }
 
