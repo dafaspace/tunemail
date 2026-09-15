@@ -2218,6 +2218,18 @@ button {
             </p>
             <button class="btn btn-primary" id="btn-spotify-connect" style="width:200px">Connect Spotify</button>
           </div>
+          <!-- Replaces the button in the store builds. See the comment on
+               IS_NATIVE_SHELL below for why connecting cannot work there. -->
+          <div id="spotify-step-native" style="display:none;text-align:center;padding:16px 0 24px">
+            <div style="font-family:var(--font-display);font-size:18px;letter-spacing:1px;margin-bottom:8px">Bring a file instead</div>
+            <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px">
+              Connecting Spotify is not available in the app.<br/>
+              Export your playlist to CSV with any Spotify exporter,<br/>
+              then import the file here. Files with an ISRC column<br/>
+              give exact links on every platform straight away.
+            </p>
+            <button class="btn btn-primary" id="btn-spotify-to-csv" style="width:200px">Import a CSV</button>
+          </div>
         </div>
         <!-- Step 2: Select playlist -->
         <div id="spotify-step-select" style="display:none">
@@ -2844,7 +2856,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v78';
+const APP_BUILD = 'v79';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4727,6 +4739,7 @@ console.log(`[tunemail] recogniser: ${RECOGNISER || 'none'}`);
 
 
 
+
 // Removed rather than hidden: a hidden control is still reachable by keyboard
 // and by a screen reader, and "Identify the song playing nearby" that does
 // nothing is worse than no button.
@@ -5684,8 +5697,33 @@ if (_plFilter) {
 // there, complete and working, with nothing able to open it and nothing
 // complaining. A defensive guard around a missing element turns an obvious
 // wiring mistake into an invisible one.
+// Spotify's OAuth cannot complete inside the store builds, and it is not worth
+// the work to make it: redirect_uri is derived from the page address, which is
+// capacitor://localhost there rather than the site, no CFBundleURLTypes entry
+// claims that scheme, and Spotify would have to have it registered. Both were
+// measured - the native origin from a running simulator build, the missing
+// scheme from Info.plist.
+//
+// It stays unfixed on purpose. A Spotify app in development mode serves FIVE
+// authenticated users, each added to an allowlist by hand, and lifting that
+// needs a registered company with 250,000 monthly users. So connecting is a
+// tool for the author and four friends, not a feature, and the road that scales
+// for everyone else is a file. Offering the file is the honest screen; leaving a
+// button that cannot succeed is the reviewable defect.
+const IS_NATIVE_SHELL = !!(window.Capacitor && window.Capacitor.isNativePlatform?.());
+
 function openSpotifyImport() {
   const token = localStorage.getItem('spotify_token');
+  const nativeStep = document.getElementById('spotify-step-native');
+  if (IS_NATIVE_SHELL && !token) {
+    document.getElementById('spotify-step-connect').style.display = 'none';
+    if (nativeStep) nativeStep.style.display = '';
+    document.getElementById('spotify-step-select').style.display = 'none';
+    document.getElementById('spotify-step-importing').style.display = 'none';
+    openModal('overlay-spotify');
+    return;
+  }
+  if (nativeStep) nativeStep.style.display = 'none';
   document.getElementById('spotify-step-connect').style.display = token ? 'none' : '';
   document.getElementById('spotify-step-select').style.display = 'none';
   document.getElementById('spotify-step-importing').style.display = 'none';
@@ -5694,6 +5732,12 @@ function openSpotifyImport() {
 }
 
 document.getElementById('btn-spotify-connect').addEventListener('click', spotifyLogin);
+
+const _toCsv = document.getElementById('btn-spotify-to-csv');
+if (_toCsv) _toCsv.addEventListener('click', () => {
+  closeModal('overlay-spotify');
+  document.getElementById('csv-file-input')?.click();
+});
 
 async function loadSpotifyPlaylists(token) {
   document.getElementById('spotify-step-connect').style.display = 'none';

@@ -43,6 +43,17 @@
       </array>
     </dict>
 	</dict>
+	<!-- The feedback sheet has <input type="file" accept="image/*">. On iOS that
+	     offers Take Photo as well as the library, and presenting the camera with
+	     no NSCameraUsageDescription TERMINATES the app - not an error dialog, a
+	     crash, in a shipping build, on a screen whose whole purpose is reporting
+	     problems. The library key is belt and braces: the modern out-of-process
+	     picker does not require it, older paths do.
+	     Both must go if the screenshot attachment ever goes. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to attach to your feedback, so a problem can be seen rather than described.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Attach a screenshot from your photos to your feedback, so a problem can be seen rather than described.</string>
 	<!-- Shown verbatim in the system prompt, so it says what the microphone is
 	     for and nothing else. Recording never leaves the device: ShazamKit
 	     matches on a signature, not on the audio. If recognition is ever cut
