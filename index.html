@@ -2900,7 +2900,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v85';
+const APP_BUILD = 'v86';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3533,6 +3533,9 @@ async function enrichTrack(t) {
   if (enrichCache.has(key)) return enrichCache.get(key);
   let out = null;
   let failed = false;
+  // Links that belong to no single answer above - Spotify and Tidal come from
+  // their own lookups and have to survive whichever branch wins.
+  const extra = {};
   try {
     if (!t.isrc) {
       // Used for this render only. Writing it back is backfillIsrcs' job, which
@@ -3549,6 +3552,15 @@ async function enrichTrack(t) {
         artwork: ap.artwork, preview: ap.preview,
         appleUrl: ap.appleUrl, exact: true,
       };
+      // Spotify and Tidal alongside the others, not in series after them: four
+      // independent lookups that do not depend on each other's answers.
+      const [sp, td] = await Promise.all([
+        resolveProviderByIsrc('spotify', t.isrc),
+        resolveProviderByIsrc('tidal', t.isrc),
+      ]);
+      if (!lookupFailed(sp) && sp) extra.spotify = sp;
+      if (!lookupFailed(td) && td) extra.tidal = td;
+
       const d = await resolveByIsrc(t.isrc);
       if (lookupFailed(d)) failed = true;
       else if (d) out = {
@@ -3576,6 +3588,7 @@ async function enrichTrack(t) {
   // shared table - so the next attempt is free to succeed. Only an answer that
   // came back is worth keeping.
   if (failed && !out) return LOOKUP_FAILED;
+  if (Object.keys(extra).length) out = { ...(out || {}), direct: { ...(out?.direct || {}), ...extra } };
   enrichCache.set(key, out);
   return out;
 }
@@ -3589,6 +3602,32 @@ async function enrichTrack(t) {
 //
 // A throttle and a genuine miss are told apart on purpose. Only a miss is
 // remembered; caching a 429 as "no such track" would make an outage permanent.
+// Spotify and Tidal, both by ISRC, both through the worker because both need a
+// client secret that must never be in this file. Neither involves the listener,
+// so neither is subject to Spotify's five-authorised-user cap - the cap counts
+// people who authorise the app, and nobody authorises anything here.
+const providerCache = { spotify: new Map(), tidal: new Map() };
+
+async function resolveProviderByIsrc(kind, isrc) {
+  if (!isrc) return null;
+  const cache = providerCache[kind];
+  if (cache.has(isrc)) return cache.get(isrc);
+  try {
+    const res = await fetch(`${MUSIC_NIGHT_WORKER}/${kind}?isrc=${encodeURIComponent(isrc)}`);
+    const d = await res.json().catch(() => null);
+    // Not configured yet is not a miss and must not be remembered as one: the
+    // day the secret is added, every cached "no" would otherwise persist.
+    if (res.status === 503) return null;
+    if (!res.ok || d?.error) { console.warn(`${kind}:`, d?.error || res.status); return LOOKUP_FAILED; }
+    const url = d?.found ? (kind === 'spotify' ? d.spotify : d.tidal) : null;
+    cache.set(isrc, url || null);
+    return url || null;
+  } catch (e) {
+    console.warn(`${kind} resolve:`, e.message);
+    return LOOKUP_FAILED;
+  }
+}
+
 async function resolveByIsrc(isrc) {
   if (!isrc) return null;
   if (isrcCache.has(isrc)) return isrcCache.get(isrc);
@@ -6806,8 +6845,9 @@ async function enrichTrackList(container, trackList) {
         artwork_url: d.artwork || null,
         // Saved beside the artwork because they came from the same answer, and
         // because a visitor with no account cannot run the lookup themselves.
-        direct_urls: (d.appleUrl || d.deezerUrl)
+        direct_urls: (d.appleUrl || d.deezerUrl || d.direct)
           ? { ...(t.direct_urls || {}),
+              ...(d.direct || {}),
               ...(d.appleUrl ? { appleMusic: d.appleUrl } : {}),
               ...(d.deezerUrl ? { deezer: d.deezerUrl } : {}) }
           : (t.direct_urls || null),

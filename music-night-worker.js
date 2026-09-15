@@ -151,6 +151,152 @@ const clientIp = (request) =>
   request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
 
 
+// ── Spotify and Tidal by ISRC, with no user involved ─────────────────────────
+//
+// Both use the client-credentials grant: the app proves who IT is and asks the
+// public catalogue a question. No listener authorises anything, so neither
+// carries a per-user cap. That matters because Spotify's development mode
+// serves FIVE authorised users and lifting it needs a registered company with
+// 250,000 monthly listeners - a wall that has nothing to do with this request,
+// because this request has no user in it.
+//
+// Measured before writing a line of it: openapi.tidal.com answers 401
+// UNAUTHORIZED rather than 404 for filter[isrc], so the route and the filter
+// are real and only the credential is missing.
+//
+// Both routes answer "not configured" when their secrets are absent, so the
+// worker can be deployed before the keys exist without breaking anything.
+
+// One app token per provider, kept in module scope with its expiry. It belongs
+// to the app rather than to any person, so sharing it across requests inside an
+// isolate is correct rather than a leak - unlike anything user-scoped, which
+// must never live here.
+const appTokens = { spotify: null, tidal: null };
+
+async function appToken(kind, env) {
+  const now = Date.now();
+  const held = appTokens[kind];
+  // Sixty seconds of headroom: a token that expires mid-flight reads as an
+  // authentication bug and is miserable to find.
+  if (held && held.value && held.expires > now + 60000) return held.value;
+
+  const conf = kind === "spotify"
+    ? { url: "https://accounts.spotify.com/api/token", id: env.SPOTIFY_CLIENT_ID, secret: env.SPOTIFY_CLIENT_SECRET }
+    : { url: "https://auth.tidal.com/v1/oauth2/token", id: env.TIDAL_CLIENT_ID, secret: env.TIDAL_CLIENT_SECRET };
+  if (!conf.id || !conf.secret) return null;
+
+  const body = new URLSearchParams({ grant_type: "client_credentials" });
+  const res = await fetch(conf.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${btoa(`${conf.id}:${conf.secret}`)}`,
+    },
+    body,
+  });
+  if (!res.ok) return null;
+  const j = await res.json().catch(() => null);
+  if (!j?.access_token) return null;
+  appTokens[kind] = {
+    value: j.access_token,
+    expires: now + (Number(j.expires_in) || 3600) * 1000,
+  };
+  return j.access_token;
+}
+
+async function lookupByIsrc(kind, isrc, env, ctx) {
+  const j = (data, status = 200) => new Response(JSON.stringify(data), {
+    status,
+    headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": "public, max-age=86400" },
+  });
+
+  if (!/^[A-Z0-9]{12}$/i.test(isrc)) return j({ error: "bad isrc" }, 400);
+
+  const cacheKey = new Request(`https://cache.tunemail/${kind}/${isrc}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const token = await appToken(kind, env);
+  if (!token) return j({ error: "not configured" }, 503);
+
+  const url = kind === "spotify"
+    ? `https://api.spotify.com/v1/search?q=${encodeURIComponent(`isrc:${isrc}`)}&type=track&limit=1`
+    : `https://openapi.tidal.com/v2/tracks?countryCode=US&filter%5Bisrc%5D=${encodeURIComponent(isrc)}`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: kind === "tidal" ? "application/vnd.api+json" : "application/json",
+      },
+    });
+  } catch {
+    return j({ error: "unreachable" }, 502);
+  }
+
+  // A token can be revoked or rotated under us. One retry with a fresh one,
+  // never a loop.
+  if (res.status === 401) {
+    appTokens[kind] = null;
+    const fresh = await appToken(kind, env);
+    if (!fresh) return j({ error: "not configured" }, 503);
+    try {
+      res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${fresh}`,
+          Accept: kind === "tidal" ? "application/vnd.api+json" : "application/json",
+        },
+      });
+    } catch {
+      return j({ error: "unreachable" }, 502);
+    }
+  }
+
+  if (!res.ok) return j({ error: `${kind} ${res.status}` }, 502);
+  const data = await res.json().catch(() => null);
+
+  let out = { found: false };
+  if (kind === "spotify") {
+    const t = data?.tracks?.items?.[0];
+    if (t?.external_urls?.spotify) {
+      out = {
+        found: true,
+        isrc,
+        spotify: t.external_urls.spotify,
+        artist: t.artists?.[0]?.name || null,
+        title: t.name || null,
+        durationMs: t.duration_ms ?? null,
+      };
+    }
+  } else {
+    const t = data?.data?.[0];
+    if (t?.id) {
+      out = {
+        found: true,
+        isrc,
+        tidal: `https://tidal.com/browse/track/${t.id}`,
+        title: t.attributes?.title || null,
+        durationMs: null,
+      };
+    }
+  }
+
+  const response = j(out);
+  // A miss is cached too, and for a shorter time: a recording absent from a
+  // catalogue today may be added tomorrow, and asking again every day is
+  // cheaper than being wrong for a year.
+  if (ctx) {
+    const keep = out.found ? 86400 : 21600;
+    const stored = new Response(JSON.stringify(out), {
+      headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": `public, max-age=${keep}` },
+    });
+    ctx.waitUntil(cache.put(cacheKey, stored.clone()));
+  }
+  return response;
+}
+
 // ── GET /p/{slug} - the card a chat app renders ──────────────────────────────
 // GitHub Pages serves one static file to every URL, and no messenger runs
 // JavaScript, so a shared link unfurls as a blank card no matter what the app
@@ -986,13 +1132,20 @@ async function route(request, env, ctx) {
     // because they are one activity: opening a playlist calls all of them.
     if (
       request.method === "GET" &&
-      (url.pathname === "/resolve" || url.pathname === "/deezer")
+      (url.pathname === "/resolve" || url.pathname === "/deezer" ||
+       url.pathname === "/spotify" || url.pathname === "/tidal")
     ) {
       if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
         return json({ error: "Too many lookups" }, 429, cors());
       }
       if (url.pathname === "/resolve") {
         return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
+      }
+      if (url.pathname === "/spotify") {
+        return lookupByIsrc("spotify", url.searchParams.get("isrc") || "", env, ctx);
+      }
+      if (url.pathname === "/tidal") {
+        return lookupByIsrc("tidal", url.searchParams.get("isrc") || "", env, ctx);
       }
       const byId = url.searchParams.get("id");
       return byId
