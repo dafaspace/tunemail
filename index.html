@@ -2512,8 +2512,21 @@ function endBoot() {
   document.documentElement.classList.remove('booting');
 }
 
+// Buttons that never come back.
+//
+// Sign In only clears its loading state in the CATCH: a successful sign-in
+// leaves it disabled and reading "..." because onAuthStateChange switches the
+// screen and nobody looks back. Sign out, return to the form, and the button is
+// dead until the page is reloaded - which on an installed app can be never.
+//
+// Resetting on entry rather than at each success: there are four of these
+// screens, the same mistake is available on all four, and a screen showing its
+// own control in a stuck state is always wrong regardless of how it got there.
+const AUTH_BUTTONS = ['btn-signin', 'btn-signup', 'btn-forgot', 'btn-reset'];
+
 function showScreen(name) {
   endBoot();
+  AUTH_BUTTONS.forEach(id => setLoading(id, false));
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('main-app').classList.remove('active');
   document.getElementById('public-view').classList.remove('active');
@@ -2770,6 +2783,8 @@ document.getElementById('btn-reset').addEventListener('click', async () => {
   // password did not change when it did, which is the worst thing this screen
   // can say.
   showToast('Password updated');
+  // Cleared here and nowhere else: the link has now done what it was for.
+  clearRecovery();
   try {
     await onSignedIn(saved.data.user);
   } catch (err) {
@@ -2885,7 +2900,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v83';
+const APP_BUILD = 'v84';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3301,12 +3316,29 @@ async function trackLinksCacheGet(artist, trackName) {
 
 async function trackLinksCacheSet(artist, trackName, fields) {
   try {
-    await sbClient.from('track_links').upsert({
+    const payload = {
       artist:     normKey(artist),
       track_name: normKey(trackName),
       updated_at: new Date().toISOString(),
       ...fields
-    }, { onConflict: 'artist,track_name' });
+    };
+
+    // direct_urls is a whole object in one column, and an upsert REPLACES it.
+    // This row is shared by every user of the app, so saving one Spotify link
+    // used to delete the Apple and Deezer links that were already there - for
+    // everybody, not just the person saving. Merging makes the write additive,
+    // which is what "this is what we know about this recording" should mean.
+    //
+    // Newest wins per platform: a person correcting a wrong link must be able
+    // to overwrite it, or the cache would harden around its first mistake.
+    if (payload.direct_urls && typeof payload.direct_urls === 'object') {
+      const existing = await trackLinksCacheGet(artist, trackName);
+      if (existing && existing.direct_urls && typeof existing.direct_urls === 'object') {
+        payload.direct_urls = { ...existing.direct_urls, ...payload.direct_urls };
+      }
+    }
+
+    await sbClient.from('track_links').upsert(payload, { onConflict: 'artist,track_name' });
   } catch (e) { console.warn('track_links upsert:', e.message); }
 }
 
@@ -4076,6 +4108,8 @@ document.getElementById('btn-save-playlist').addEventListener('click', async () 
         btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = '';
       }
       searchTabNewPlaylist = false;
+      // Not a bare return any more: the cleanup below is now in a finally, so
+      // this no longer walks past it and leaves Save disabled for the session.
       return;
     }
     closeModal('overlay-playlist');
@@ -4083,8 +4117,11 @@ document.getElementById('btn-save-playlist').addEventListener('click', async () 
   } catch (err) {
     showToast('Error: ' + err.message);
     console.warn(err);
+  } finally {
+    // finally, not a trailing line: the success path above returns early, and a
+    // trailing line is exactly what an early return walks past.
+    setLoading('btn-save-playlist', false);
   }
-  setLoading('btn-save-playlist', false);
 });
 
 // ── Playlists: open edit modal ────────────────────────────────────────
@@ -5659,6 +5696,7 @@ if (_delConfirm) _delConfirm.addEventListener('click', async () => {
 // Named, and called from both exits, because a session that simply expires
 // reaches the SIGNED_OUT branch of the listener without passing this button.
 function clearPersonalStorage() {
+  clearRecovery();
   try {
     ['spotify_token', 'spotify_verifier', 'spotify_verifier_ts', 'tunemail_pending_copy']
       .forEach(k => localStorage.removeItem(k));
@@ -7018,6 +7056,21 @@ if (_profCreate) _profCreate.addEventListener('click', () => {
 // a form whose button appears to do nothing at all. It is a named function for
 // exactly that reason - three paths reach the sign-in screen and each has to
 // attach it, and a fourth path added later has one obvious thing to copy.
+// Following a recovery link CREATES A REAL SESSION - verifyOtp and setSession
+// both mint one, and the client persists it and refreshes it indefinitely. So
+// the reset screen was a painted screen over an account that was already open:
+// reload, or just reopen the app later, and the URL is clean, getSession finds
+// the stored session, and whoever opened that email is inside without ever
+// setting a password or knowing the old one.
+//
+// The mark says "this session came from a link and has not finished its job".
+// sessionStorage rather than localStorage on purpose: it dies with the tab, so
+// a stuck mark cannot lock someone out of their own app for ever.
+const RECOVERY_MARK = 'tunemail_recovery_pending';
+function markRecovery() { try { sessionStorage.setItem(RECOVERY_MARK, '1'); } catch (e) {} }
+function recoveryPending() { try { return sessionStorage.getItem(RECOVERY_MARK) === '1'; } catch (e) { return false; } }
+function clearRecovery() { try { sessionStorage.removeItem(RECOVERY_MARK); } catch (e) {} }
+
 let _authListenerAttached = false;
 function attachAuthListener() {
   if (_authListenerAttached || !sbClient) return;
@@ -7026,6 +7079,9 @@ function attachAuthListener() {
     // Skip if we're handling Spotify callback — it manages its own flow
     if (new URLSearchParams(window.location.search).get('state') === 'spotify_import') return;
     if (event === 'SIGNED_IN' && session && !currentUser) {
+      // A recovery session announces itself as a sign-in. Letting that through
+      // is the same hole by another door.
+      if (recoveryPending()) { showScreen('reset'); return; }
       await onSignedIn(session.user);
     } else if (event === 'SIGNED_OUT') {
       // A session that expires on its own arrives here and never touches the
@@ -7161,9 +7217,10 @@ function attachAuthListener() {
         window.history.replaceState({}, '', window.location.pathname);
         // Recovery arrives in this format too. Same rule as the query-param
         // path: send them to set a password rather than into the app.
-        if (hashType === 'recovery') { showScreen('reset'); return; }
+        if (hashType === 'recovery') { markRecovery(); showScreen('reset'); attachAuthListener(); return; }
         showToast('Email confirmed! Welcome!');
         if (data.session) await onSignedIn(data.session.user);
+        attachAuthListener();
         return;
       } catch (err) {
         console.warn('Hash token error:', err.message);
@@ -7183,7 +7240,7 @@ function attachAuthListener() {
       // A recovery link opens a session, but the point of following it is to set
       // a new password - so stop here rather than dropping them into the app,
       // where they would still not know their password.
-      if (type === 'recovery') { showScreen('reset'); return; }
+      if (type === 'recovery') { markRecovery(); showScreen('reset'); attachAuthListener(); return; }
       showToast('Email confirmed! You are now signed in.');
     } catch (err) {
       showToast(type === 'recovery'
@@ -7198,8 +7255,12 @@ function attachAuthListener() {
   // Check existing session
   const { data: { session } } = await sbClient.auth.getSession();
   if (session) {
-    await onSignedIn(session.user);
+    // The reload case. A session exists, but it was opened by a link whose
+    // whole purpose has not been served yet, so it does not open the app.
+    if (recoveryPending()) showScreen('reset');
+    else await onSignedIn(session.user);
   } else {
+    clearRecovery();
     showScreen('signin');
   }
 
