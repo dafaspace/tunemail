@@ -2857,7 +2857,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v80';
+const APP_BUILD = 'v81';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3551,6 +3551,35 @@ async function resolveByIsrc(isrc) {
 }
 
 
+// Every exact link this app can know, gathered in one place.
+//
+// It was being thrown away. Measured on the shared JAZZ playlist: 41 tracks,
+// 41 of them carrying an ISRC, and ZERO exact links out of 164 - every button a
+// search URL. Three separate reasons, all of them avoidable:
+//
+//   Spotify - spotify_uri is on 41 of 41 rows and converts to an exact URL with
+//             a string split. No lookup, no API, no key. It was simply never
+//             used for the link.
+//   Apple   - enrichTrack already resolves appleUrl from the ISRC, and paint()
+//             used the artwork and the preview out of that same answer and
+//             dropped the URL on the floor.
+//   Deezer  - identically: deezerUrl resolved, then discarded.
+//
+// So the app held the answer and rendered the guess. This merges what is stored
+// with what was just resolved, newest winning, and the callers pass it on.
+function mergeExactLinks(track, enriched) {
+  const out = { ...(track?.direct_urls || {}) };
+  const uri = String(track?.spotify_uri || '');
+  if (!out.spotify && uri.startsWith('spotify:track:')) {
+    const id = uri.slice('spotify:track:'.length);
+    if (/^[A-Za-z0-9]{22}$/.test(id)) out.spotify = `https://open.spotify.com/track/${id}`;
+  }
+  if (enriched?.appleUrl) out.appleMusic = enriched.appleUrl;
+  if (enriched?.deezerUrl) out.deezer = enriched.deezerUrl;
+  if (enriched?.direct) Object.assign(out, enriched.direct);
+  return out;
+}
+
 function buildPlatformLinksHtml(artist, trackName, odesliLinks, showAll = false, directUrls = null) {
   const list = showAll ? STREAMING_PLATFORMS : STREAMING_PLATFORMS.slice(0, TOP_PLATFORMS);
   return list.map(p => {
@@ -4200,8 +4229,8 @@ function renderTrackList(tracks, playlistId) {
   }
 
   container.innerHTML = tracks.map((t, i) => {
-    const topLinks = buildPlatformLinksHtml(t.artist, t.track_name, odesliCache.get(t.spotify_uri) || null, false, t.direct_urls || null);
-    const du = t.direct_urls || {};
+    const du = mergeExactLinks(t, null);
+    const topLinks = buildPlatformLinksHtml(t.artist, t.track_name, odesliCache.get(t.spotify_uri) || null, false, du);
     // Check if any manual direct links saved
     const hasDirectLinks = du.spotify || du.appleMusic || du.youtubeMusic || du.bandcamp || du.tidal || du.deezer;
     return `
@@ -6469,15 +6498,42 @@ async function enrichTrackList(container, trackList) {
       const btn = item.querySelector('.track-play');
       if (btn) { btn.dataset.preview = data.preview; btn.hidden = false; }
     }
+    // The links were painted before the lookup finished, so they are search
+    // URLs at this point. Now that the exact ones exist, use them.
+    if (data.appleUrl || data.deezerUrl || data.direct) {
+      const t = trackList[i];
+      const linksDiv = item.querySelector('.platform-links');
+      if (t && linksDiv) {
+        const expandBtn = item.querySelector('.platform-expand');
+        linksDiv.innerHTML = buildPlatformLinksHtml(
+          t.artist, t.track_name, null,
+          expandBtn?.dataset.expanded === '1',
+          mergeExactLinks(t, data)
+        );
+      }
+    }
   };
 
   async function worker() {
     while (queue.length) {
       const { t, i } = queue.shift();
       const hit = byKey.get(`${normKey(t.artist)}|${normKey(t.track_name)}`);
-      if (hit && (hit.artwork_url || hit.preview_url)) {
-        paint(i, { artwork: hit.artwork_url, preview: hit.preview_url });
+      // Two questions, and they used to share one gate: "does this track have
+      // artwork" and "does it have exact links". Every one of these 41 tracks
+      // had cached artwork, so the whole body was skipped and the links were
+      // never resolved - which is why the shared page showed 41 ISRCs and zero
+      // exact Apple or Deezer links. The same shape of mistake is already
+      // written up above backfillIsrcs; this is the second instance of it.
+      const cachedLinks = hit?.direct_urls || null;
+      const hasExact = !!(cachedLinks && (cachedLinks.appleMusic || cachedLinks.deezer));
+      if (hit && (hit.artwork_url || hit.preview_url) && (hasExact || !t.isrc)) {
+        paint(i, { artwork: hit.artwork_url, preview: hit.preview_url, direct: cachedLinks });
         continue;
+      }
+      // Paint what the cache does have straight away, so the artwork does not
+      // disappear while the links are being looked up.
+      if (hit && (hit.artwork_url || hit.preview_url)) {
+        paint(i, { artwork: hit.artwork_url, preview: hit.preview_url, direct: cachedLinks });
       }
       // A miss is worth remembering too. Some tracks are not findable by search
       // - "Dave Brubeck 40 Days" returns eight results without 40 Days among
@@ -6513,6 +6569,13 @@ async function enrichTrackList(container, trackList) {
     for (const [t, d] of fresh) {
       trackLinksCacheSet(t.artist, t.track_name, {
         artwork_url: d.artwork || null,
+        // Saved beside the artwork because they came from the same answer, and
+        // because a visitor with no account cannot run the lookup themselves.
+        direct_urls: (d.appleUrl || d.deezerUrl)
+          ? { ...(t.direct_urls || {}),
+              ...(d.appleUrl ? { appleMusic: d.appleUrl } : {}),
+              ...(d.deezerUrl ? { deezer: d.deezerUrl } : {}) }
+          : (t.direct_urls || null),
         preview_url: d.preview || null,
         enrich_missed_at: null,
       });
