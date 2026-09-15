@@ -2900,7 +2900,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v84';
+const APP_BUILD = 'v85';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5465,7 +5465,14 @@ function populateAccount(user) {
   document.getElementById('account-email').textContent = user.email || '';
   document.getElementById('btn-avatar').textContent = initials.slice(0, 1);
   document.getElementById('account-avatar').textContent = initials.slice(0, 1);
-  // Load username from profiles
+  // Cleared BEFORE the lookup, not conditionally after it. The old code only
+  // wrote when the new account had a username, so an account without one
+  // inherited the previous person's name and their public profile link, still
+  // visible, in their own account panel.
+  document.getElementById('account-username').value = '';
+  const linkDiv = document.getElementById('account-profile-link');
+  if (linkDiv) linkDiv.style.display = 'none';
+
   sbClient.from('profiles').select('*').eq('id', user.id).maybeSingle()
     .then(({ data }) => {
       if (data?.username) {
@@ -6910,20 +6917,34 @@ async function claimPendingPlaylist() {
   let slug = null;
   try { slug = localStorage.getItem('tunemail_pending_copy'); } catch (e) { return; }
   if (!slug || !currentUser) return;
-  try { localStorage.removeItem('tunemail_pending_copy'); } catch (e) {}
+
+  // The slug is NOT dropped here any more. This runs right after someone
+  // followed a shared link, tapped "Save to my playlists" and made an account -
+  // the single most important minute this app has - and every failure below
+  // used to be a bare return: no message, nothing saved, and the slug already
+  // gone so trying again was impossible. Now it survives until the copy works.
+  const done = () => { try { localStorage.removeItem('tunemail_pending_copy'); } catch (e) {} };
 
   try {
     const { data: src } = await sbClient
       .from('music_playlists')
       .select('id,name,description,is_public')
       .eq('public_slug', slug).eq('is_public', true).maybeSingle();
-    if (!src) return;
+    if (!src) {
+      done();
+      showToast('That playlist is no longer shared');
+      return;
+    }
 
     const { data: srcTracks } = await sbClient
       .from('playlist_tracks')
       .select('artist,track_name,album,duration_ms,spotify_uri,isrc,genre,position')
       .eq('playlist_id', src.id).order('position');
-    if (!srcTracks || !srcTracks.length) return;
+    if (!srcTracks || !srcTracks.length) {
+      done();
+      showToast(`"${src.name}" has no tracks to save`);
+      return;
+    }
 
     const { data: pl, error } = await sbClient
       .from('music_playlists')
@@ -6935,7 +6956,12 @@ async function claimPendingPlaylist() {
         public_slug: generateSlug(),
       })
       .select().single();
-    if (error || !pl) return;
+    if (error || !pl) {
+      // Kept, so the next sign-in tries again rather than losing it.
+      showToast('Could not save it just now - it will be tried again next time');
+      console.warn('claim playlist:', error?.message);
+      return;
+    }
 
     const rows = srcTracks.map((t, i) => ({
       playlist_id: pl.id,
@@ -6955,9 +6981,14 @@ async function claimPendingPlaylist() {
       }
       if (e2) throw e2;
     }
+    done();
     await loadPlaylists();
     showToast(`Saved "${src.name}" to your playlists`);
   } catch (e) {
+    // The tracks failed after the playlist was made, so there is now a
+    // half-empty playlist with the right name. Saying so beats silence, and the
+    // slug stays for another attempt.
+    showToast('Saved it only partly - try again from the link');
     console.warn('claim playlist:', e.message);
   }
 }
@@ -7169,6 +7200,7 @@ function attachAuthListener() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (session) {
       await onSignedIn(session.user);
+      attachAuthListener();
       await handleSpotifyCallback(spotifyCode);
     } else {
       // Same trap as the refused-link branch above: this shows the sign-in form
