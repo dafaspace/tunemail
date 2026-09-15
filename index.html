@@ -2614,11 +2614,39 @@ async function copyToClipboard(text, okMessage = 'Link copied') {
   return false;
 }
 
-function showToast(msg, duration = 2500) {
+// The toast can now carry ONE action, because one-tap saving needs somewhere to
+// put Undo. Pointer events are enabled only while an action exists - the toast
+// is pointer-events:none by default so it never blocks the screen underneath,
+// and turning that off permanently would be a worse bug than the one this fixes.
+let _toastTimer = null;
+function showToast(msg, duration = 2500, action = null) {
   const t = document.getElementById('toast');
+  if (_toastTimer) clearTimeout(_toastTimer);
   t.textContent = msg;
+  t.style.pointerEvents = 'none';
+  if (action && action.label && typeof action.onClick === 'function') {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = action.label;
+    b.style.cssText = 'margin-left:12px;background:none;border:none;padding:0;font:inherit;' +
+      'font-weight:700;color:var(--primary-text);cursor:pointer;text-decoration:underline';
+    b.addEventListener('click', () => {
+      t.classList.remove('show');
+      // And put this back. Measured: without it the toast stays
+      // pointer-events:auto after the action is taken, so an invisible strip
+      // across the bottom of the screen goes on swallowing taps for ever.
+      t.style.pointerEvents = 'none';
+      if (_toastTimer) clearTimeout(_toastTimer);
+      action.onClick();
+    });
+    t.appendChild(b);
+    t.style.pointerEvents = 'auto';
+  }
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), duration);
+  _toastTimer = setTimeout(() => {
+    t.classList.remove('show');
+    t.style.pointerEvents = 'none';
+  }, duration);
 }
 
 // ── Slug generator ────────────────────────────────────────────────────
@@ -2857,7 +2885,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v81';
+const APP_BUILD = 'v82';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4831,6 +4859,79 @@ function auddStatus(msg) {
   else { el.style.display = 'none'; el.textContent = ''; }
 }
 
+// ── Where a recognised track goes, with no second tap ────────────────
+//
+// The measured complaint about Shazam in 2026 is not that it fails to hear a
+// song - it is what happens next: users report the "Add To" control appearing
+// for roughly two songs in ten, the My Shazam list failing to sync, and saved
+// shazams disappearing. So the second tap is the thing to remove, and the
+// saving must not depend on any third party being willing.
+//
+// A standing playlist called Heard, made on first use and private. It is an
+// ordinary playlist, which is the whole point: it already has a share link that
+// opens for someone with nothing installed, which is the one thing Shazam's own
+// list cannot do.
+const HEARD_PLAYLIST = 'Heard';
+
+async function ensureHeardPlaylist() {
+  const { data: found, error: findErr } = await sbClient
+    .from('music_playlists')
+    .select('id')
+    .eq('user_id', currentUser.id)
+    .eq('name', HEARD_PLAYLIST)
+    .limit(1);
+  if (findErr) throw findErr;
+  if (found && found.length) return found[0].id;
+
+  const { data: made, error: makeErr } = await sbClient
+    .from('music_playlists')
+    .insert({ user_id: currentUser.id, name: HEARD_PLAYLIST, is_public: false, public_slug: null })
+    .select('id')
+    .single();
+  if (makeErr) throw makeErr;
+  return made.id;
+}
+
+// Returns a short description of what happened, for the toast.
+async function saveHeardTrack(r) {
+  const playlistId = await ensureHeardPlaylist();
+
+  // Same recording twice is the ordinary case - a song plays twice in a bar -
+  // and silently duplicating it would make the list worse every time it works.
+  const { data: dupe } = await sbClient
+    .from('playlist_tracks')
+    .select('id')
+    .eq('playlist_id', playlistId)
+    .eq('artist', r.artist || '')
+    .eq('track_name', r.title || '')
+    .limit(1);
+  if (dupe && dupe.length) return { already: true, playlistId };
+
+  let nextPos = 0;
+  try {
+    const { data: last } = await sbClient
+      .from('playlist_tracks')
+      .select('position')
+      .eq('playlist_id', playlistId)
+      .order('position', { ascending: false })
+      .limit(1);
+    nextPos = last?.length ? (last[0].position + 1) : 0;
+  } catch (_) {}
+
+  const row = {
+    playlist_id: playlistId,
+    artist: r.artist || '',
+    track_name: r.title || '',
+    isrc: r.isrc || null,
+    position: nextPos,
+    direct_urls: r.appleMusicUrl ? { appleMusic: r.appleMusicUrl } : null,
+  };
+  const { data: made, error } = await sbClient
+    .from('playlist_tracks').insert(row).select('id').single();
+  if (error) throw error;
+  return { id: made.id, playlistId };
+}
+
 // ── ShazamKit ────────────────────────────────────────────────────────
 // The plugin does the listening, the timing and the microphone prompt, so
 // there is no MediaRecorder here and nothing to clean up if it throws.
@@ -4871,8 +4972,45 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
     }
 
     updateSearchPreview();
-    auddStatus(pick(RECOGNISE_WIN));
-    setTimeout(() => auddStatus(''), 4000);
+
+    // One tap ends here: the track is already saved. The fields above stay
+    // filled so the older path - pick a different playlist, share it, edit the
+    // genre - is still open to anyone who wants it.
+    const what = `${r.title || 'that'} - ${r.artist || ''}`.trim();
+    if (!currentUser) {
+      auddStatus('Found it. Sign in to keep it.');
+      setTimeout(() => auddStatus(''), 6000);
+    } else {
+      try {
+        const saved = await saveHeardTrack(r);
+        await loadPlaylists();
+        if (saved.already) {
+          auddStatus('Already in Heard');
+          setTimeout(() => auddStatus(''), 4000);
+        } else {
+          auddStatus(pick(RECOGNISE_WIN));
+          setTimeout(() => auddStatus(''), 4000);
+          // Undo, because a save nobody confirmed needs a way back that does
+          // not involve finding the playlist and deleting a row by hand.
+          showToast(`Added to ${HEARD_PLAYLIST} - ${what}`, 6000, {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                await sbClient.from('playlist_tracks').delete().eq('id', saved.id);
+                await loadPlaylists();
+                showToast('Removed');
+              } catch (err) { showToast('Could not undo: ' + err.message); }
+            },
+          });
+        }
+      } catch (err) {
+        // Recognition worked; only the saving failed. Say which, or the person
+        // retries the listening that already succeeded.
+        console.warn('save heard:', err.message);
+        auddStatus('Found it, but could not save: ' + err.message);
+        setTimeout(() => auddStatus(''), 6000);
+      }
+    }
 
   } catch (e) {
     auddStatus(e?.message || 'Something went wrong, try again');
