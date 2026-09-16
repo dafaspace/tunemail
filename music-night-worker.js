@@ -1055,6 +1055,18 @@ export default {
       const tg = await ensureTelegramWebhook(env);
       if (tg.repaired) {
         await notifyOps(env, `Telegram webhook was missing (was: ${tg.was}) and has been re-registered.`);
+      } else if (tg.checked === true && tg.repaired === false && tg.was !== undefined) {
+        // The worst case, and it used to fall between the two branches and be
+        // reported NOWHERE: the webhook is gone and re-registering it failed.
+        // Feedback stops arriving and nothing says so. Same six-hour cooldown,
+        // its own key, because this must not be silenced by the other two.
+        if (await alarmAllowed("telegram-broken", 6 * 3600)) {
+          await notifyOps(
+            env,
+            `Telegram webhook is MISSING (was: ${tg.was}) and re-registering FAILED: ${tg.detail || "no detail"}. ` +
+            `User feedback is not reaching this chat. Silent for 6h.`
+          );
+        }
       } else if (tg.checked === false) {
         // Same cooldown as the keepalive, and for the same reason: if Telegram
         // itself is unreachable this fires on every tick, and it fires into
@@ -1073,7 +1085,22 @@ export default {
   // seventeen places a response is built. Those all call cors() with no
   // argument and always will; this is what makes that harmless.
   async fetch(request, env, ctx) {
-    const res = await route(request, env, ctx);
+    // route() is wrapped because an exception thrown inside it never reached
+    // the header rewriting below - it became Cloudflare's own error page, with
+    // no Access-Control-Allow-Origin on it, so in a browser the failure arrived
+    // as an opaque CORS error rather than as a 500 anyone could read.
+    let res;
+    try {
+      res = await route(request, env, ctx);
+    } catch (err) {
+      res = new Response(JSON.stringify({ error: "Something went wrong" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+      // The detail goes to the log, never to the caller: an exception message
+      // can carry a query, a path or a token fragment.
+      console.error("unhandled:", err && err.stack ? err.stack : String(err));
+    }
     const origin = allowedOrigin(request);
     if (res.headers.get("Access-Control-Allow-Origin") === origin) return res;
     const headers = new Headers(res.headers);
@@ -1234,6 +1261,14 @@ async function route(request, env, ctx) {
 
       if (await overRecognizeLimit(env, user.id)) {
         return fail(429, "Too many songs identified in the last hour");
+      }
+
+      // Checked BEFORE the body is read. formData() buffers the whole upload
+      // into memory first, so a size limit applied afterwards has already paid
+      // the cost it exists to avoid.
+      const declared = Number(request.headers.get("Content-Length") || 0);
+      if (declared && declared > MAX_AUDIO_BYTES) {
+        return fail(413, "The recording is too long");
       }
 
       let file;
