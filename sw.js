@@ -3,12 +3,12 @@
  * Bump CACHE_VERSION on every deploy that changes the precached files below,
  * otherwise returning visitors keep the old shell until the cache is evicted.
  */
-const CACHE_VERSION = 'v87';
+const CACHE_VERSION = 'v88';
 const CACHE_NAME = `tunemail-${CACHE_VERSION}`;
 
-/* Same-origin shell. Without any one of these the page cannot render, so these
- * go through addAll: if a single request fails the whole install fails and the
- * browser retries later, instead of leaving a half-filled cache behind. */
+/* Same-origin shell. Without any one of these the page cannot render, so a
+ * single failure fails the whole install and the browser retries later, rather
+ * than leaving a half-filled cache behind. */
 const SHELL = [
   './',
   './index.html',
@@ -31,7 +31,10 @@ const SHELL = [
   './fonts/dm-sans-latin-ext.woff2',
 ];
 
-/* Cross-origin code the page needs to boot. Same criticality as the shell. */
+/* Cross-origin code the page needs to boot. NOT the same criticality as the
+ * shell, despite what this comment used to claim: these come from somebody
+ * else's CDN, and letting their bad minute cost us the entire offline cache was
+ * the defect. Cached when they arrive, skipped when they do not. */
 const VENDOR = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js',
@@ -71,14 +74,32 @@ async function put(cache, request, response) {
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    const fetched = await Promise.all(
-      [...SHELL, ...VENDOR].map(async (url) => {
+
+    /* SHELL is all-or-nothing, because a half-filled shell is worse than none.
+     * VENDOR is NOT, and that split is the fix: both lists used to be in one
+     * Promise.all, so a jsdelivr hiccup threw, the install failed, and NOTHING
+     * was cached - not even our own files, which had already arrived. One CDN
+     * having a bad minute meant no offline app at all. */
+    const shell = await Promise.all(
+      SHELL.map(async (url) => {
         const res = await fetch(url, { cache: 'reload', credentials: 'omit' });
         if (!res.ok) throw new Error(`${res.status} for ${url}`);
         return [url, res];
       })
     );
-    for (const [url, res] of fetched) await put(cache, url, res);
+    for (const [url, res] of shell) await put(cache, url, res);
+
+    /* Best effort. A missing vendor file means the runtime handler fetches it
+     * on first use, which is what happens today anyway on a cold visit. */
+    await Promise.all(
+      VENDOR.map(async (url) => {
+        try {
+          const res = await fetch(url, { cache: 'reload', credentials: 'omit' });
+          if (res.ok) await put(cache, url, res);
+        } catch (e) { /* the shell is already safe; this is a bonus */ }
+      })
+    );
+
     await self.skipWaiting();
   })());
 });
@@ -130,7 +151,18 @@ async function navigation(request) {
     // 'reload' skips the HTTP cache on the way out. Without it "network first"
     // is a lie: max-age=600 on the HTML means the browser answers this from its
     // own cache for ten minutes and the network is never reached.
-    const res = await fetch(request, { cache: 'reload' });
+    //
+    // The race is the other half of that. Without it this waits on the network
+    // for as long as the network cares to take, and the cached shell below is
+    // reached only when the request FAILS - never when it merely hangs. That is
+    // the exact defect already written up in the portfolio notes for Cinemail:
+    // measured there at 1501 ms against 0 ms. A hotel wi-fi that accepts
+    // connections and answers nothing is the common case, and it is the one
+    // this handler used to be worst at.
+    const res = await Promise.race([
+      fetch(request, { cache: 'reload' }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 3500)),
+    ]);
     if (res.ok) await put(cache, './index.html', res.clone());
     return res;
   } catch (err) {

@@ -2900,7 +2900,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v87';
+const APP_BUILD = 'v88';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3005,18 +3005,34 @@ document.getElementById('fb-replies').addEventListener('click', e => {
 
 async function deleteFeedback(id) {
   try {
-    // The file first, while the row that names it still exists. The other order
-    // loses the path and leaves the object behind with nothing pointing at it.
+    // Read the path first, so it is still known after the row is gone.
     const { data: row } = await sbClient.from('feedback')
       .select('screenshot_url').eq('id', id).eq('user_id', currentUser.id).maybeSingle();
     const shot = row?.screenshot_url;
+
+    // The ROW goes first now, and its error is checked.
+    //
+    // The old order deleted the file first and then deleted the row without
+    // looking at the result - and supabase-js resolves with {error} rather than
+    // throwing, so a refusal was invisible. A refused row delete therefore left
+    // the message in place pointing at a screenshot that no longer existed, and
+    // said nothing. Deleting the row first means a refusal leaves everything
+    // exactly as it was.
+    //
+    // The cost of this order is an orphaned file if the row goes and the file
+    // does not. That is the cheaper failure: an object nobody can reach, rather
+    // than a message whose picture is missing.
+    //
+    // The user_id filter is what RLS enforces anyway; stating it here means a
+    // policy change can never silently widen what this call reaches.
+    const { error: rowErr } = await sbClient.from('feedback')
+      .delete().eq('id', id).eq('user_id', currentUser.id);
+    if (rowErr) throw rowErr;
+
     if (shot && !/^https?:\/\//i.test(shot)) {
       const { error } = await sbClient.storage.from('feedback-screenshots').remove([shot]);
       if (error) console.warn('screenshot remove:', error.message);
     }
-    // The user_id filter is what RLS enforces anyway; stating it here means a
-    // policy change can never silently widen what this call reaches.
-    await sbClient.from('feedback').delete().eq('id', id).eq('user_id', currentUser.id);
     loadFeedbackReplies();
   } catch (e) { showToast('Could not delete: ' + e.message); }
 }
@@ -7392,11 +7408,42 @@ function attachAuthListener() {
     //
     // updateViaCache:'none' also stops GitHub Pages' max-age=600 from delaying
     // the check, which we cannot set a header for.
+    // Whether a worker was already in charge when this page loaded.
+    //
+    // Read BEFORE registering, because it is the difference between two very
+    // different events wearing the same name. On a FIRST visit there is no
+    // controller, the new worker calls clients.claim(), and controllerchange
+    // fires - and the old code reloaded the page seconds after somebody arrived,
+    // for no reason they could see. On a LATER visit the same event means a new
+    // build has taken over, which is the case worth acting on.
+    const hadController = !!navigator.serviceWorker.controller;
+
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (reloading) return;      // controllerchange can fire twice; a loop here
-      reloading = true;           // would be worse than a stale page
-      window.location.reload();
+      if (!hadController) return; // first visit: nothing was replaced
+      reloading = true;
+
+      // And do not reload out from under somebody who is using the app.
+      //
+      // The update check runs on every foreground, which on a phone is many
+      // times a day, so this event can land while a playlist name or a piece of
+      // feedback is half typed. Reloading then throws that away to deliver a
+      // change nobody asked for yet. Offered instead, and taken immediately only
+      // when the page is hidden - nothing is being typed into a hidden page.
+      if (document.visibilityState === 'hidden') { window.location.reload(); return; }
+
+      if (typeof showToast === 'function') {
+        showToast('A new version is ready', 10000, {
+          label: 'Reload',
+          onClick: () => window.location.reload(),
+        });
+      }
+      // Whether or not they tap it, the next time the app goes to the background
+      // it comes back on the new build.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') window.location.reload();
+      }, { once: true });
     });
 
     window.addEventListener('load', () => {
