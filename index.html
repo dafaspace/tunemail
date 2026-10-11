@@ -1158,7 +1158,18 @@ button {
       font-size: 13px;
       font-family: var(--font-text);
       padding: 9px 16px;
-      white-space: nowrap;
+      /* Measured on a real iPhone SE (375pt): "Added to Heard - One Inch Punch -
+         Yin Yin" plus an "Also to Apple Music" button is far wider than the
+         screen, and with nowrap plus translateX(-50%) the overflow went out
+         EQUALLY on both sides - the first and last words were simply gone.
+         The box is capped to the screen and the text wraps instead. */
+      white-space: normal;
+      width: max-content;
+      max-width: calc(100vw - 32px);
+      box-sizing: border-box;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      justify-content: center; text-align: center;
+      line-height: 1.35;
       z-index: 500;
       opacity: 0;
       pointer-events: none;
@@ -2641,7 +2652,7 @@ function showToast(msg, duration = 2500, action = null) {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = action.label;
-    b.style.cssText = 'margin-left:12px;background:none;border:none;padding:0;font:inherit;' +
+    b.style.cssText = 'background:none;border:none;padding:0;font:inherit;white-space:nowrap;' +
       'font-weight:700;color:var(--primary-text);cursor:pointer;text-decoration:underline';
     b.addEventListener('click', () => {
       t.classList.remove('show');
@@ -2900,7 +2911,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v89';
+const APP_BUILD = 'v90';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -5089,7 +5100,12 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
   auddStatus(pick(RECOGNISE_THINKING));
 
   try {
-    const r = await SHAZAM.listen({ seconds: 12 });
+    const r = await SHAZAM.listen({ seconds: 15 });
+    // One line per attempt, so a miss on a real phone says WHY: a timeout after
+    // several partial tries is a short or quiet snippet, an error is the
+    // network, and a match says how long it took.
+    console.log(`[tunemail] listen: ${r?.matched ? 'match' : (r?.reason || 'none')}` +
+      ` after ${r?.attempts ?? '?'} tries${r?.matched ? ` - ${r.artist} / ${r.title} / isrc ${r.isrc || 'none'}` : ''}`);
 
     if (!r?.matched) {
       // A denied microphone or a dead network is not "I did not hear it", and
@@ -5109,6 +5125,43 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
     pendingDirectUrls = {};
     if (r.appleMusicUrl) pendingDirectUrls.appleMusic = r.appleMusicUrl;
 
+    // Settles with the id of the row THIS recognition saved, or null. The link
+    // lookups below wait on it rather than reading a shared "last saved" value:
+    // they start before the save does, and a lookup that finished first would
+    // otherwise write this track's links onto the previous track's row.
+    let settleSaved;
+    const thisRowId = new Promise((res) => { settleSaved = res; });
+
+    // The other three, by ISRC, right now - not later when the playlist is
+    // opened. Found on a real phone 11 Oct: after a match only Apple Music had
+    // the exact-link tick, because ShazamKit itself returns only the Apple URL
+    // and the Spotify, Tidal and Deezer lookups ran only during playlist
+    // enrichment. But this is the moment that matters - heard it, open it in
+    // what I use - so the lookups happen here, in parallel, and the preview is
+    // repainted when they land.
+    if (r.isrc) {
+      Promise.all([
+        resolveProviderByIsrc('spotify', r.isrc),
+        resolveProviderByIsrc('tidal', r.isrc),
+        resolveByIsrc(r.isrc),
+      ]).then(([sp, td, dz]) => {
+        if (!pendingDirectUrls) pendingDirectUrls = {};
+        if (sp && !lookupFailed(sp)) pendingDirectUrls.spotify = sp;
+        if (td && !lookupFailed(td)) pendingDirectUrls.tidal = td;
+        if (dz && !lookupFailed(dz) && dz.deezer) pendingDirectUrls.deezer = dz.deezer;
+        updateSearchPreview();
+        // And into the row this recognition saved - awaited, never guessed.
+        const links = { ...pendingDirectUrls };
+        return thisRowId.then((rowId) => {
+          if (!rowId || !currentUser) return;
+          return sbClient.from('playlist_tracks')
+            .update({ direct_urls: links })
+            .eq('id', rowId)
+            .then(({ error }) => { if (error) console.warn('heard links:', error.message); });
+        });
+      }).catch(e => console.warn('exact links after match:', e.message));
+    }
+
     if (r.artist && r.title && currentUser) {
       trackLinksCacheSet(r.artist, r.title, {
         isrc: r.isrc || null,
@@ -5123,11 +5176,13 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
     // genre - is still open to anyone who wants it.
     const what = `${r.title || 'that'} - ${r.artist || ''}`.trim();
     if (!currentUser) {
+      settleSaved(null);
       auddStatus('Found it. Sign in to keep it.');
       setTimeout(() => auddStatus(''), 6000);
     } else {
       try {
         const saved = await saveHeardTrack(r);
+        settleSaved(saved.already ? null : (saved.id || null));
         await loadPlaylists();
         if (saved.already) {
           auddStatus('Already in Heard');
@@ -5163,6 +5218,7 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
       } catch (err) {
         // Recognition worked; only the saving failed. Say which, or the person
         // retries the listening that already succeeded.
+        settleSaved(null);
         console.warn('save heard:', err.message);
         auddStatus('Found it, but could not save: ' + err.message);
         setTimeout(() => auddStatus(''), 6000);

@@ -39,6 +39,10 @@ public class ShazamPlugin: CAPPlugin, CAPBridgedPlugin, SHSessionDelegate {
     /// to leave the microphone running because an error took an early return.
     private var pendingCall: CAPPluginCall?
     private var timeout: DispatchWorkItem?
+    /// How many partial attempts said "not yet" before the outcome. Returned
+    /// with the result so a miss on a real phone can be told apart from a
+    /// window that was simply too short.
+    private var missesSoFar = 0
     private let lock = NSLock()
 
     // MARK: - Bridge
@@ -53,7 +57,8 @@ public class ShazamPlugin: CAPPlugin, CAPBridgedPlugin, SHSessionDelegate {
     }
 
     @objc func listen(_ call: CAPPluginCall) {
-        let seconds = call.getDouble("seconds") ?? 12.0
+        let seconds = call.getDouble("seconds") ?? 15.0
+        missesSoFar = 0
 
         lock.lock()
         if pendingCall != nil {
@@ -123,7 +128,7 @@ public class ShazamPlugin: CAPPlugin, CAPBridgedPlugin, SHSessionDelegate {
         // Not an error: a song ShazamKit does not know sounds exactly like a
         // song it has not heard enough of yet, and both end here.
         let work = DispatchWorkItem { [weak self] in
-            self?.finish(["matched": false, "reason": "timeout"])
+            self?.finish(["matched": false, "reason": "timeout", "attempts": self?.missesSoFar ?? 0])
         }
         timeout = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
@@ -175,7 +180,7 @@ public class ShazamPlugin: CAPPlugin, CAPBridgedPlugin, SHSessionDelegate {
             return
         }
 
-        var result: [String: Any] = ["matched": true]
+        var result: [String: Any] = ["matched": true, "attempts": missesSoFar + 1]
         if let title = item.title { result["title"] = title }
         if let artist = item.artist { result["artist"] = artist }
         if let isrc = item.isrc { result["isrc"] = isrc }
@@ -188,13 +193,23 @@ public class ShazamPlugin: CAPPlugin, CAPBridgedPlugin, SHSessionDelegate {
     }
 
     public func session(_ session: SHSession, didNotFindMatchFor signature: SHSignature, error: Error?) {
-        // No match and a failed lookup arrive through the same callback. They
-        // are different things to a person - one means move closer, the other
-        // means the network is gone - so they are not flattened into one answer.
+        // A real error ends the attempt: the network is gone, or the service
+        // refused, and more audio will not change that.
         if let error {
             finish(["matched": false, "reason": "error", "detail": error.localizedDescription])
-        } else {
-            finish(["matched": false, "reason": "nomatch"])
+            return
         }
+        // But "no match YET" does not, and treating it as final was the bug.
+        //
+        // With matchStreamingBuffer the session tries to match repeatedly as
+        // the signature grows, and reports each failed try through this same
+        // callback. Finishing on the first one cut listening off after a few
+        // seconds - usually the intro, a quiet bar, or a crowd - which is the
+        // least recognisable part of most songs. Found on a real iPhone, 11 Oct:
+        // 3 of 5 tracks recognised, the misses among the ones with long
+        // atmospheric openings. The window now runs to the timeout, as
+        // Shazam's own app does, and only a match, an error or the timeout
+        // ends it.
+        missesSoFar += 1
     }
 }
