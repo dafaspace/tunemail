@@ -1,156 +1,141 @@
-# Outstanding — what must be settled before Tunemail is submitted
+# Outstanding — what stands between Tunemail and a store listing
 
 Not a wish list. Everything here is a thing a store reviewer, a bill, or a user
-can trip over, written down at the moment it was created so it is not
-rediscovered at submission time.
-
-Last touched 13 Sep 2026.
+can trip over. Rewritten 11 Oct 2026: the version before this listed as open
+three defects that had been fixed on 13 Sep, which is worse than no list.
 
 ---
 
-## 1. Blockers for submission
+## 0. The order of work
 
-### 1.1 Who actually performs recognition, and does the app still claim it?
+The house rule is: name the few functions that matter, get number one working
+on real material, then ship. So the blockers below are ordered by what stops a
+build reaching a stranger, not by size.
 
-**State.** AudD is switched off, not removed: `AUDD_ENABLED = false` in
-`index.html`. The button, its CSS and ~130 lines of JS are still in the file.
-The worker still carries the `/recognize` route, its per-user rate limiter and
-the `AUDD_TOKEN` secret. Nothing calls any of it.
+**Proposed core functions, ranked - awaiting Dafa's confirmation:**
 
-**Why it is a blocker.** A submitted build must be honest about what it does. If
-recognition ships, the listing, the screenshots and the microphone permission
-string all describe it; if it does not ship, the microphone permission must not
-be requested at all — an unused permission is a rejection under App Store
-5.1.1, and on Android an unused `RECORD_AUDIO` is a Play Data Safety
-declaration that does not match the binary.
+1. **Send a song or playlist that opens on the exact recording, for anyone.**
+   A link that works with no app and no account, and lands on the recording
+   rather than a search. Measured 15 Sep: 147 of 164 platform links exact on
+   the shared JAZZ playlist.
+2. **Hear a song and keep it in one tap.** ShazamKit recognition straight into
+   a list that can be sent. iOS only. **Built, never run on a real device.**
+3. **Bring your music in with its identifiers intact.** CSV with ISRC, round
+   trip without loss; the import says whether the file carried ISRCs.
+4. **Put it in the library you actually listen with.** Add to Apple Music via
+   MusicKit. iOS only, Apple Music subscribers only. **Built, never run.**
 
-**Progress, 13 Sep 2026.** ShazamKit is built and working in the **iOS** build:
-`mobile/ios/App/App/ShazamPlugin.swift`, registered through
-`MainViewController.swift`. Verified in the simulator — the bridge lists
-`Shazam`, `isPluginAvailable` answers true, the page resolves
-`recogniser: shazam` and the button is present with its accessible name. Web
-builds resolve `recogniser: none` and the block is removed from the document.
-
-**Android is not done**, and it is not a copy of the iOS work. Apple ships a
-separate ShazamKit SDK for Android, downloaded by hand from the developer
-portal rather than fetched from Maven, and it is expected to need a developer
-token signed with a private key the way MusicKit does — which would mean
-minting it server-side in the worker rather than shipping a key in the app.
-**That expectation is unverified**: the download and its documentation sit
-behind an Apple login. Confirm it before planning around it, because if a token
-is needed it changes the shape of the work.
-
-**The decision to take, and it is one decision, not three:**
-
-- ShazamKit in the native builds only (free with the developer programme, needs
-  our own Capacitor plugin, Swift + Kotlin) — then the PWA has no recognition
-  and the marketing must not promise it, and the dead AudD code should go.
-- Back to AudD everywhere (paid per listen) — then `AUDD_ENABLED = true` and the
-  dead code becomes live code again.
-- Ship without recognition at all — then remove the AudD code, the button, the
-  worker route, the token, and every microphone permission string.
-
-### 1.2 The dead code
-
-~130 lines of AudD JavaScript plus its CSS and markup live in `index.html`
-behind a flag, deliberately, so the feature could come back in one word. That
-was the right call while the answer was unknown. It stops being right the moment
-1.1 is decided: whichever way it goes, one of the two paths becomes dead for
-good and should be deleted rather than shipped to a store.
-
-Also check at the same time: `.select('direct_urls, audd_result')` reads a
-column named for AudD. If AudD is gone for good, that column and its name
-outlive it and should be dealt with deliberately rather than left as a fossil.
-
-### 1.3 Cloudflare
-
-The worker is deployed by hand through the dashboard, and its state is not in
-this repo. Before submission, reconcile it:
-
-- `/recognize` — alive, and paid. Keep, or delete with the AudD decision.
-- `AUDD_TOKEN` — still a secret in Cloudflare. **Cloudflare does not show a
-  secret back.** If it is ever deleted, the token has to come from the audd.io
-  account, not from Cloudflare. Removing the secret is the hard kill switch: the
-  route then answers "Recognition is not configured".
-- Confirm the deployed worker matches `music-night-worker.js` in this repo.
-  Deploying by hand means the two can drift silently, and the repo copy is the
-  one that gets read.
-- Confirm the cron trigger for `/keepalive` is still set in the dashboard. It is
-  configured there, not in the code, so it does not travel with a deploy.
-
-### 1.4 Apple key 74LFLG28G5
-
-A `.p8` private key was committed to a public repo and removed from HEAD. The
-key itself must be **revoked in the Apple Developer portal**. This has never
-been confirmed done. Until it is, assume it is compromised.
+Anything not on this list is support, and it should be visible that it is.
 
 ---
 
-## 2. Known defects, measured, not yet fixed
+## 1. Blockers for a first TestFlight build
 
-From Cinemail's audit of their own auth screens, checked against this file on
-13 Sep 2026. Two of their five apply here.
+### 1.1 Xcode cannot sign - only Dafa can fix this
 
-### 2.1 A spent or expired link says nothing
+`xcodebuild` for a device fails with `No Account for Team "BMTR6JW8NW"`. The
+team id is already in the project (taken from the one code-signing identity on
+this machine). What is missing is the Apple ID itself in Xcode, which needs a
+password, so it is his to do:
 
-Supabase refuses a used recovery or confirmation link by sending
-`error=access_denied&error_code=otp_expired&error_description=...` — in the
-fragment or the query, with no tokens and no `type`. We read neither: grep for
-`error_code` in `index.html` returns nothing. The init falls through to "no
-session" and shows the sign-in screen with no explanation, so someone who
-pressed "reset my password" lands on a form asking for the password they do not
-have.
+1. Xcode -> Settings -> Accounts -> + -> Apple ID.
+2. Target App -> Signing & Capabilities -> + Capability -> **ShazamKit**.
+3. developer.apple.com -> Identifiers -> `app.tunemail.mobile` -> **MusicKit**.
 
-Worth knowing, because it makes the shape less mysterious: these tokens are
-single use, and mail providers and security scanners **fetch links to check
-them**. The scan spends the token. "It worked once and never again" is the
-normal presentation.
+### 1.2 Functions 2 and 4 have never met reality
 
-Fix: read `error` / `error_code` / `error_description` from both the fragment
-and the query before creating the client, treat their presence as "arrived from
-a link", and say the link is spent with a request-a-new-one control inline.
+Recognition and Apple Music both compile, register with the bridge and answer
+their status calls in the simulator. Neither has heard a real song or added a
+real track, because a simulator has no audio and no subscription. Until they
+run on a real iPhone they are hypotheses, not features, and the listing must
+not mention them.
 
-### 2.2 Signing up twice with one address promises a letter that never comes
+What to run, in this order:
+- the listen button under real music: does it recognise, and does the track
+  land in Heard with no second tap?
+- "Also to Apple Music": permission prompt, found by ISRC, in the library?
+- a recognised track's Spotify and Tidal buttons: the recording, not a search?
+- account deletion: email confirmation, and it completes rather than failing.
 
-With email-enumeration protection on, `signUp` for an existing address returns
-HTTP 200 and a **fabricated user** — random id, `created_at` and
-`confirmation_sent_at` stamped now — and sends nothing. The only tell is
-`identities: []`.
+### 1.3 Apple key 74LFLG28G5
 
-We show "We sent a confirmation link to your inbox." and nothing arrives.
+A `.p8` private key was committed to a public repo on 3 Sep and removed from
+HEAD. The key itself must be **revoked in the Apple Developer portal**. Never
+confirmed done. Assume it is compromised until it is.
 
-Worse, `index.html` then writes a `profiles` row keyed to that fabricated id, so
-every duplicate signup leaves an orphan row belonging to nobody.
+### 1.4 Cloudflare: delete DEBUG_KEY
 
-Fix: check `data.user.identities.length === 0`, say the account already exists,
-offer Sign In and Forgot password with the address prefilled into both, and
-guard the profile write.
-
-### 2.3 A stalled password reset never comes back
-
-`updateUser` is awaited with no timeout, so a request that hangs leaves the
-button on "…" for ever and the `catch` unreached — indistinguishable from a slow
-success. Cinemail hit this and now races a 20 s timeout. `onSignedIn` also needs
-to move out of the `try`: a stall after a successful password change is
-currently reported as a reset failure, which tells someone their password did
-not change when it did.
+Added 16 Sep only to read why the Spotify token was refused. It gates a
+diagnostic and has no other use. Delete it in Workers -> music-night-worker ->
+Settings -> Variables and Secrets. Without it the diagnostic answers nobody.
 
 ---
 
-## 3. Deferred by choice
+## 2. Before the App Store listing, after TestFlight works
 
-- **Eight languages.** Cinemail ships EN ES FR RU DE IT UA KA through an `I18N`
-  map with `data-i18n` attributes, 436 keys. Tunemail is English only. Their
-  four traps are written down in their session; the load-bearing one is that
-  `t()` returns the key when a translation is missing, so a missing key renders
-  as `confirm_delete` on screen in every language.
-- **The icon map.** Cinemail paints 27 named icons through a `const ICONS` map
-  and an `icon()` helper. Tunemail has 79 inline `<svg>` at their use sites.
-  The family rule says contours must be identical, which means adopting the map.
-  Convert whole blocks: a half-converted block renders worse than none, because
-  a `data-ic` placeholder inside a template string is never filled by a paint
-  pass that runs at startup.
-- **Friends.** Cinemail has search through an RPC, request/accept/decline,
-  two-tap removal and a server-side block. Not obviously wanted here. If it is
-  ever built, decide deliberately about their sign-up wall on shared links —
-  they describe it as the worst first impression in their app.
+The checklist from the portfolio's "Ship it, and do not regret it":
+
+- **Every function on the list above works on real material, checked by
+  somebody who is not the author.**
+- **A private build to 10-20 people with one instruction: find a link that
+  opens the wrong recording.** The whole claim of function 1 is exactness, so
+  a wrong link is a refutation rather than a bug, and this is where to find
+  them cheaply.
+- **Guideline 4.2** (more than a repackaged website): ShazamKit and MusicKit
+  are the native behaviour that answers it. This is another reason 1.2 matters
+  - without them working, the app is exactly the shape 4.2 names.
+- **Guideline 2.3**: the listing describes only what the build does.
+- **Privacy**: the policy now covers the microphone (added 15 Sep). App Store
+  Connect's privacy labels must match it: account email, playlists, optional
+  feedback screenshots, no tracking.
+
+---
+
+## 3. Decided, so not open
+
+- **Recognition is ShazamKit on iOS.** AudD stays switched off
+  (`AUDD_ENABLED = false`), worker route and token untouched, so it can return
+  in one word. The ~130 lines behind the flag stay until Android is decided.
+- **Spotify import is a tool, not a feature.** Development mode serves five
+  authorised users and lifting it needs a company with 250,000 monthly users.
+  The store builds offer a CSV instead. Catalogue lookups by ISRC use client
+  credentials and are NOT subject to that cap - that is how Spotify links are
+  exact.
+- **Mail** goes through Resend on `mail.tunemail.app`; DKIM, SPF and DMARC pass.
+
+---
+
+## 4. Open, but not blocking a first build
+
+- **Android recognition.** Apple ships a ShazamKit SDK for Android, downloaded
+  by hand behind an Apple login and expected to need a developer token minted
+  server-side. Unverified. There is also no Java on this machine, so no Android
+  build can be made here at all yet.
+- **YouTube links are searches.** No credential, and the free quota (10,000
+  units a day, 100 per search) is about a hundred tracks a day for the whole
+  app. Left as a search on purpose.
+
+---
+
+## 5. Deferred by choice
+
+- **Eight languages**, the way Cinemail does them. Its four traps are written
+  down there; the load-bearing one is that `t()` returns the key when a
+  translation is missing.
+- **The icon map.** Cinemail paints 27 icons through `const ICONS`; Tunemail has
+  inline `<svg>`. The family rule means adopting the map, in whole blocks.
+
+---
+
+## Closed since 13 Sep, so the history is not lost
+
+Fixed, each verified by behaviour rather than by reading: spent auth links now
+explain themselves; duplicate sign-up no longer promises a letter or writes an
+orphan profile; password reset has a timeout and no longer reports success as
+failure; a recovery link no longer opens the app on reload; stored XSS through
+`public_slug` (client fix plus a database constraint); the shipping app could
+not reach the worker at all (CORS); sign-out left the Spotify token on disk;
+lookup failures were written to the shared cache as "does not exist"; exact
+links were resolved and then discarded; account deletion was blocked by a
+foreign key; the Telegram webhook could fail silently; the service worker lost
+the whole offline cache to a CDN hiccup and reloaded the page mid-typing.
