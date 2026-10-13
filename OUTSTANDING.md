@@ -50,10 +50,11 @@ Not yet checked on the device:
 - account deletion: email confirmation, and it completes;
 - a shared track link opened by someone else, in a messenger.
 
-Known broken, in production: **Paste a link.** It calls
-`movie-night-proxy.dafa4me.workers.dev/meta` and `/?url=`, which answer 404
-and 405. The fix is to resolve pasted Spotify, Apple, Deezer and Tidal links
-to an ISRC inside music-night-worker.
+Paste a link works again since 13 Oct (it called a proxy that answered 404
+and 405): Spotify, Deezer and Tidal through music-night-worker's /link with
+their ISRC, Apple Music read by the page, YouTube and SoundCloud by title only.
+Short links (spotify.link, link.deezer.com, on.soundcloud.com) are handled but
+were never tried with a real one.
 
 ### 1.2 Apple key 74LFLG28G5
 

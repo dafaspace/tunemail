@@ -2631,7 +2631,7 @@ const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 // ── State ─────────────────────────────────────────────────────────────
 let sbClient = null;
 let currentUser = null;
-let pendingDirectUrls = null; // from odesli after paste link
+let pendingDirectUrls = null; // exact links for the song in the form, from a pasted link
 let playlists = [];
 let currentPlaylist = null;
 let confirmCallback = null;
@@ -3037,7 +3037,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v91';
+const APP_BUILD = 'v92';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3425,7 +3425,6 @@ const TOP_PLATFORMS = 4;
 let platformsExpanded = false;
 
 // ── Odesli (song.link) integration ───────────────────────────────────
-const ODESLI_WORKER = 'https://movie-night-proxy.dafa4me.workers.dev/';
 const odesliCache = new Map();
 
 const ODESLI_PLATFORM_MAP = {
@@ -4032,6 +4031,7 @@ document.getElementById('btn-share-track').addEventListener('click', () => share
   document.getElementById('search-artist').value.trim(),
   document.getElementById('search-track').value.trim(),
   getGenreValue(),
+  { isrc: pendingIsrc, direct_urls: pendingDirectUrls ? { ...pendingDirectUrls } : null },
 ));
 
 // ── Tracks: add to playlist ───────────────────────────────────────────
@@ -4065,9 +4065,11 @@ document.getElementById('btn-add-track').addEventListener('click', async () => {
       track_name: track,
       genre: genre || null,
       position: nextPos,
+      isrc: pendingIsrc || null,
       direct_urls: pendingDirectUrls || null,
     });
     pendingDirectUrls = null;
+    pendingIsrc = null;
     if (error) throw error;
 
     showToast('Added to playlist');
@@ -5696,60 +5698,131 @@ if (_auddBtn) _auddBtn.addEventListener('click', async () => {
   }
 });
 
-// ── Paste link parser ────────────────────────────────────────────────
-document.getElementById('btn-parse-link').addEventListener('click', async () => {
-  const raw = document.getElementById('paste-link-input').value.trim();
-  if (!raw) return;
-  const btn = document.getElementById('btn-parse-link');
-  btn.textContent = '…';
-  btn.disabled = true;
-  pendingDirectUrls = null;
-  try {
-    // Fetch meta first
-    const metaRes = await fetch(`https://movie-night-proxy.dafa4me.workers.dev/meta?url=${encodeURIComponent(raw)}`).then(r => r.json());
+// ── Paste a link ─────────────────────────────────────────────────────
+//
+// Found 11 Oct: this called movie-night-proxy's /meta and Odesli through it,
+// both gone (404 and 405), so in production every link answered "Could not
+// parse link". It now asks music-night-worker's /link, which reads the source
+// itself. Apple Music links are read here instead, because iTunes refuses
+// Workers and answers the page.
+//
+// The pasted link is exact by definition - it is the recording the person
+// chose - and the ISRC behind it makes the other platforms exact too.
+let pendingIsrc = null;
+let pasteSeq = 0;
 
-    if (!metaRes || metaRes.error) { showToast('Could not parse link'); return; }
-    if (metaRes.artist) document.getElementById('search-artist').value = metaRes.artist;
-    if (metaRes.track)  document.getElementById('search-track').value  = metaRes.track;
-    document.getElementById('paste-link-input').value = '';
-    updateSearchPreview();
-    showToast('Filled!');
+const PASTE_SAYS = {
+  'not a song':                'That is an album or a playlist. Paste a link to one song.',
+  'no such song':              'That song could not be found',
+  'short link did not resolve':'That short link did not open. Try the full link.',
+  unsupported:                 'Paste a song link from Spotify, Apple Music, YouTube, Deezer, SoundCloud or Tidal',
+  'not a link':                'Paste a song link from Spotify, Apple Music, YouTube, Deezer, SoundCloud or Tidal',
+};
 
-    // Check track_links cache first
-    if (metaRes.artist && metaRes.track) {
-      const cached = await trackLinksCacheGet(metaRes.artist, metaRes.track);
-      if (cached?.direct_urls && Object.keys(cached.direct_urls).length) {
-        pendingDirectUrls = cached.direct_urls;
-        renderPlatformLinks(metaRes.artist, metaRes.track, 'search-platform-links', platformsExpanded);
-      }
-    }
+// music.apple.com/us/album/creep/1097861387?i=1097861700 or /song/creep/1097861700
+function appleTrackId(u) {
+  if (!/^(music|itunes)\.apple\.com$/i.test(u.hostname)) return null;
+  const i = u.searchParams.get('i');
+  if (i && /^\d{1,12}$/.test(i)) return i;
+  const m = u.pathname.match(/\/song\/(?:[^/]+\/)?(\d{1,12})\/?$/);
+  if (m) return m[1];
+  return /\/(album|playlist|artist|station)\//.test(u.pathname) ? 'notTrack' : null;
+}
 
-    // Fetch odesli in background with delay to avoid rate limit
-    setTimeout(async () => {
-      try {
-        const odesli = await fetch(`https://movie-night-proxy.dafa4me.workers.dev/?url=${encodeURIComponent(raw)}`).then(r => r.json());
-        if (odesli && odesli.linksByPlatform) {
-          pendingDirectUrls = {};
-          for (const [platform, info] of Object.entries(odesli.linksByPlatform)) {
-            if (info.url) pendingDirectUrls[platform] = info.url;
-          }
-          // Cache to track_links
-          const a = document.getElementById('search-artist').value.trim();
-          const t = document.getElementById('search-track').value.trim();
-          if (a && t && currentUser) {
-            trackLinksCacheSet(a, t, { direct_urls: pendingDirectUrls });
-            renderPlatformLinks(a, t, 'search-platform-links', platformsExpanded);
-          }
-        }
-      } catch (_) {}
-    }, 3000);
-  } catch (e) {
-    showToast('Could not parse link');
-  } finally {
-    btn.textContent = '↵ Fill';
-    btn.disabled = false;
+async function readPastedLink(raw) {
+  let u = null;
+  try { u = new URL(raw); } catch { /* not a URL: the worker says so */ }
+  const appleId = u ? appleTrackId(u) : null;
+  if (appleId === 'notTrack') return { found: false, reason: 'not a song' };
+  if (appleId) {
+    let res;
+    try { res = await fetch(`https://itunes.apple.com/lookup?id=${appleId}&entity=song`); }
+    catch { return LOOKUP_FAILED; }
+    if (!res.ok) return LOOKUP_FAILED;
+    const t = (await res.json().catch(() => null))?.results?.find(x => x.wrapperType === 'track');
+    if (!t) return { found: false, reason: 'no such song' };
+    let apple = null;
+    try { const v = new URL(t.trackViewUrl); v.searchParams.delete('uo'); apple = v.href; } catch {}
+    return {
+      found: true, source: 'apple',
+      artist: t.artistName || '', title: t.trackName || '',
+      isrc: null, durationMs: t.trackTimeMillis || null,
+      artwork: bigArt(t.artworkUrl100),
+      links: apple && URL_SHAPE.appleMusic.test(apple) ? { appleMusic: apple } : {},
+    };
   }
+  try {
+    const res = await fetch(`${MUSIC_NIGHT_WORKER}/link?url=${encodeURIComponent(raw)}`);
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !d || d.error) { console.warn('link:', d?.error || res.status); return LOOKUP_FAILED; }
+    return d;
+  } catch (e) {
+    console.warn('link:', e.message);
+    return LOOKUP_FAILED;
+  }
+}
+
+// The rest of the platforms, after the fields are already filled. Each answer
+// is dropped if the form has moved on: a new paste, or the person typing.
+async function fillExactLinks(seq, r, links) {
+  const still = () => seq === pasteSeq && pendingDirectUrls === links;
+  // An ISRC is looked up by name only with a duration to check it against.
+  // YouTube and SoundCloud bring none, and a name alone is how wrong
+  // recordings got in before (5 of 35 on JAZZ).
+  const isrc = r.isrc || (r.durationMs ? await discoverIsrc(r.artist, r.title, r.durationMs) : null);
+  if (!still()) return;
+  if (isrc) pendingIsrc = isrc;
+  const [sp, td, dz, ap, bc] = await Promise.all([
+    isrc && !links.spotify ? resolveProviderByIsrc('spotify', isrc) : null,
+    isrc && !links.tidal ? resolveProviderByIsrc('tidal', isrc) : null,
+    isrc && !links.deezer ? resolveByIsrc(isrc) : null,
+    isrc && !links.appleMusic ? resolveAppleByIsrc(isrc) : null,
+    !links.bandcamp ? resolveBandcamp(r.artist, r.title) : null,
+  ]);
+  if (!still()) return;
+  if (sp && !lookupFailed(sp)) links.spotify = sp;
+  if (td && !lookupFailed(td)) links.tidal = td;
+  if (dz && !lookupFailed(dz) && dz.deezer) links.deezer = dz.deezer;
+  if (ap && !lookupFailed(ap) && ap.appleUrl) links.appleMusic = ap.appleUrl;
+  if (bc && !lookupFailed(bc)) links.bandcamp = bc;
+  renderPlatformLinks(r.artist, r.title, 'search-platform-links', platformsExpanded);
+  if (currentUser) {
+    trackLinksCacheSet(r.artist, r.title, { ...(isrc ? { isrc } : {}), direct_urls: { ...links } });
+  }
+}
+
+document.getElementById('btn-parse-link').addEventListener('click', async () => {
+  const input = document.getElementById('paste-link-input');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const seq = ++pasteSeq;
+  setLoading('btn-parse-link', true);
+  let r;
+  try { r = await readPastedLink(raw); }
+  finally { setLoading('btn-parse-link', false); }
+  if (seq !== pasteSeq) return;
+
+  if (lookupFailed(r)) { showToast('Could not reach the music service, try again', 4000); return; }
+  if (!r?.found) { showToast(PASTE_SAYS[r?.reason] || PASTE_SAYS.unsupported, 5000); return; }
+
+  document.getElementById('search-artist').value = r.artist;
+  document.getElementById('search-track').value = r.title;
+  input.value = '';
+  const links = { ...(r.links || {}) };
+  pendingDirectUrls = links;
+  pendingIsrc = r.isrc || null;
+  updateSearchPreview();
+  fillExactLinks(seq, r, links).catch(e => console.warn('paste links:', e.message));
 });
+
+// Links found for a pasted song belong to that song. Typing a different name
+// into the fields makes them someone else's, so they go.
+for (const id of ['search-artist', 'search-track']) {
+  document.getElementById(id).addEventListener('input', () => {
+    pendingDirectUrls = null;
+    pendingIsrc = null;
+  });
+}
 
 // Allow pressing Enter in paste field
 document.getElementById('paste-link-input').addEventListener('keydown', e => {

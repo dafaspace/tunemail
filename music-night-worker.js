@@ -527,6 +527,207 @@ async function bandcampFind(artistRaw, titleRaw, ctx) {
   return response;
 }
 
+// ── A pasted link, read back into artist, title and ISRC ────────────────────
+//
+// GET /link?url=...
+//
+// "Paste a link" used to call movie-night-proxy's /meta and Odesli through it.
+// Both answer 404 and 405 now, so in production the field did nothing at all
+// and said "Could not parse link" about every link. This replaces both.
+//
+// What comes back is what the source itself says about the recording: Spotify,
+// Deezer and Tidal give the ISRC, which is what turns every other platform's
+// link exact. YouTube and SoundCloud give only a title and an uploader, so they
+// come back with no ISRC and the app does not guess one: a name match with no
+// duration to check it against is exactly how wrong recordings got in before.
+//
+// Apple Music is not here. iTunes answers 429 to Workers (it counts by address
+// and Cloudflare's egress is shared), and the page can call its lookup
+// directly, so the app reads Apple links itself.
+
+// Hosts a pasted link may be on, and the only hosts a short link may lead to.
+// Nothing else is ever fetched, so this cannot be pointed somewhere else.
+const LINK_HOST = /^(open\.spotify\.com|spotify\.link|(www\.)?deezer\.com|deezer\.page\.link|link\.deezer\.com|(listen\.)?tidal\.com|(www\.|m\.|music\.)?youtube\.com|youtu\.be|(www\.|m\.)?soundcloud\.com|on\.soundcloud\.com)$/i;
+const SHORT_HOST = /^(spotify\.link|deezer\.page\.link|link\.deezer\.com|on\.soundcloud\.com)$/i;
+
+function parseMusicUrl(u) {
+  const h = u.hostname.toLowerCase().replace(/^(www|m)\./, "");
+  const p = u.pathname;
+  let m;
+  if (h === "open.spotify.com") {
+    if ((m = p.match(/^\/(?:intl-[a-z]{2}(?:-[a-z]{2})?\/)?track\/([A-Za-z0-9]{22})/))) return { kind: "spotify", id: m[1] };
+    if (/\/(album|playlist|artist|show|episode)\//.test(p)) return { kind: "notTrack" };
+  }
+  if (h === "deezer.com") {
+    if ((m = p.match(/^\/(?:[a-z]{2}\/)?track\/(\d{1,12})/))) return { kind: "deezer", id: m[1] };
+    if (/\/(album|playlist|artist)\//.test(p)) return { kind: "notTrack" };
+  }
+  if (h === "tidal.com" || h === "listen.tidal.com") {
+    if ((m = p.match(/^\/(?:browse\/)?track\/(\d{1,12})/))) return { kind: "tidal", id: m[1] };
+    if (/\/(album|playlist|artist|mix)\//.test(p)) return { kind: "notTrack" };
+  }
+  if (h === "youtu.be" && (m = p.match(/^\/([\w-]{11})/))) return { kind: "youtube", id: m[1] };
+  if (h === "youtube.com" || h === "music.youtube.com") {
+    const v = u.searchParams.get("v") || (p.match(/^\/shorts\/([\w-]{11})/) || [])[1];
+    if (v && /^[\w-]{11}$/.test(v)) return { kind: "youtube", id: v };
+    if (u.searchParams.get("list")) return { kind: "notTrack" };
+  }
+  if (h === "soundcloud.com" && (m = p.match(/^\/([\w-]+)\/([\w-]+)\/?$/))) {
+    const reserved = ["sets", "likes", "tracks", "albums", "reposts", "followers", "following", "popular-tracks", "comments"];
+    if (!reserved.includes(m[2])) return { kind: "soundcloud", url: `https://soundcloud.com/${m[1]}/${m[2]}` };
+    return { kind: "notTrack" };
+  }
+  if (h === "soundcloud.com" && /^\/[\w-]+\/sets\//.test(p)) return { kind: "notTrack" };
+  return null;
+}
+
+// Short links answer with a redirect, or with a page that carries the target.
+// Up to three hops, and every hop must land on a host we already accept.
+async function expandShortLink(u) {
+  for (let i = 0; i < 3 && SHORT_HOST.test(u.hostname); i++) {
+    let r;
+    try {
+      r = await fetch(u.href, { redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 (compatible; tunemail/1.0; +https://tunemail.app)" } });
+    } catch { return null; }
+    let next = null;
+    const loc = r.headers.get("Location");
+    if (loc) {
+      try { next = new URL(loc, u); } catch { return null; }
+    } else if (r.ok) {
+      const html = (await r.text()).slice(0, 200000);
+      const m = html.match(/https:\/\/(?:open\.spotify\.com|www\.deezer\.com|deezer\.com|soundcloud\.com)\/[^"'\s<>]+/);
+      if (m) { try { next = new URL(m[0].replace(/&amp;/g, "&")); } catch { return null; } }
+    }
+    if (!next || !LINK_HOST.test(next.hostname)) return null;
+    u = next;
+  }
+  return u;
+}
+
+// "Radiohead - Creep (Official Video)" by the channel "Radiohead".
+function fromVideoTitle(title, author) {
+  const noise = /\s*[([](?:official|music|lyric|lyrics|audio|video|visuali[sz]er|hd|hq|4k)\b[^)\]]*[)\]]/gi;
+  const t = String(title || "").replace(noise, "").trim();
+  const a = String(author || "").trim();
+  if (/ - Topic$/.test(a)) return { artist: a.replace(/ - Topic$/, ""), title: t };
+  const dash = t.match(/^(.+?)\s+[-\u2013\u2014]\s+(.+)$/);   // hyphen, en or em dash
+  if (dash) return { artist: dash[1].trim(), title: dash[2].trim() };
+  return { artist: a.replace(/VEVO$/i, "").replace(/\s*official$/i, "").trim(), title: t };
+}
+
+const isoDurationMs = (s) => {
+  const m = String(s || "").match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);
+  return m ? ((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0)) * 1000 : null;
+};
+
+async function readLink(raw, env, ctx) {
+  const j = (data, status = 200, maxAge = 0) => new Response(JSON.stringify(data), {
+    status,
+    headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": `public, max-age=${maxAge}` },
+  });
+
+  let u;
+  try { u = new URL(String(raw || "").trim().slice(0, 2000)); } catch { return j({ found: false, reason: "not a link" }); }
+  if (u.protocol === "spotify:") {
+    const m = u.pathname.match(/^track:([A-Za-z0-9]{22})$/);
+    if (!m) return j({ found: false, reason: "not a song" });
+    u = new URL(`https://open.spotify.com/track/${m[1]}`);
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return j({ found: false, reason: "not a link" });
+  if (!LINK_HOST.test(u.hostname)) return j({ found: false, reason: "unsupported" });
+  if (SHORT_HOST.test(u.hostname)) {
+    const long = await expandShortLink(u);
+    if (!long) return j({ found: false, reason: "short link did not resolve" });
+    u = long;
+  }
+
+  const src = parseMusicUrl(u);
+  if (!src) return j({ found: false, reason: "unsupported" });
+  if (src.kind === "notTrack") return j({ found: false, reason: "not a song" });
+
+  const cacheKey = new Request(`https://cache.tunemail/link/${src.kind}/${encodeURIComponent(src.id || src.url)}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  let out = null;
+  if (src.kind === "spotify" || src.kind === "tidal") {
+    const token = await appToken(src.kind, env);
+    if (!token) return j({ error: "not configured" }, 503);
+    const url = src.kind === "spotify"
+      ? `https://api.spotify.com/v1/tracks/${src.id}`
+      : `https://openapi.tidal.com/v2/tracks/${src.id}?countryCode=US&include=artists`;
+    let r;
+    try {
+      r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: src.kind === "tidal" ? "application/vnd.api+json" : "application/json" } });
+    } catch { return j({ error: "unreachable" }, 502); }
+    if (r.status === 404 || r.status === 400) return j({ found: false, reason: "no such song" }, 200, 3600);
+    if (!r.ok) return j({ error: `${src.kind} ${r.status}` }, 502);
+    const d = await r.json().catch(() => null);
+    if (src.kind === "spotify" && d?.id) {
+      out = {
+        artist: (d.artists || []).map((a) => a.name).filter(Boolean).join(", "),
+        title: d.name || "",
+        isrc: d.external_ids?.isrc || null,
+        durationMs: d.duration_ms ?? null,
+        artwork: d.album?.images?.[0]?.url || null,
+        links: { spotify: `https://open.spotify.com/track/${d.id}` },
+      };
+    } else if (src.kind === "tidal" && d?.data?.id) {
+      const ids = new Set((d.data.relationships?.artists?.data || []).map((a) => a.id));
+      const names = (d.included || [])
+        .filter((x) => x.type === "artists" && (!ids.size || ids.has(x.id)))
+        .map((x) => x.attributes?.name).filter(Boolean);
+      out = {
+        artist: names.join(", "),
+        title: d.data.attributes?.title || "",
+        isrc: d.data.attributes?.isrc || null,
+        durationMs: isoDurationMs(d.data.attributes?.duration),
+        artwork: null,
+        links: { tidal: `https://tidal.com/browse/track/${d.data.id}` },
+      };
+    }
+  } else if (src.kind === "deezer") {
+    const d = await deezerGet(`track/${src.id}`);
+    if (d?.__status) return j({ error: `deezer ${d.__status}` }, 502);
+    if (d?.id) out = {
+      artist: d.artist?.name || "",
+      title: d.title || "",
+      isrc: d.isrc || null,
+      durationMs: d.duration ? d.duration * 1000 : null,
+      artwork: d.album?.cover_xl || null,
+      links: { deezer: `https://www.deezer.com/track/${d.id}` },
+    };
+  } else {
+    const page = src.kind === "youtube" ? `https://www.youtube.com/watch?v=${src.id}` : src.url;
+    const oembed = src.kind === "youtube"
+      ? `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(page)}`
+      : `https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(page)}`;
+    let r;
+    try { r = await fetch(oembed); } catch { return j({ error: "unreachable" }, 502); }
+    if (r.status === 404 || r.status === 401 || r.status === 403) return j({ found: false, reason: "no such song" }, 200, 3600);
+    if (!r.ok) return j({ error: `${src.kind} ${r.status}` }, 502);
+    const d = await r.json().catch(() => null);
+    if (d?.title) {
+      const guess = src.kind === "youtube"
+        ? fromVideoTitle(d.title, d.author_name)
+        : { artist: d.author_name || "", title: String(d.title).replace(new RegExp(`\\s+by\\s+${(d.author_name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"), "") };
+      out = {
+        artist: guess.artist, title: guess.title, isrc: null, durationMs: null,
+        artwork: d.thumbnail_url || null,
+        links: src.kind === "youtube"
+          ? { youtubeMusic: `https://music.youtube.com/watch?v=${src.id}` }
+          : { soundcloud: src.url },
+      };
+    }
+  }
+
+  if (!out || !out.artist || !out.title) return j({ found: false, reason: "no such song" }, 200, 3600);
+  const response = j({ found: true, source: src.kind, ...out }, 200, 86400);
+  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
+}
+
 // ── Deezer, which a browser cannot call at all ───────────────────────────────
 // api.deezer.com sends no Access-Control-Allow-Origin, so every fetch to it
 // from the page fails with "TypeError: Failed to fetch" before it reaches the
@@ -1300,7 +1501,7 @@ async function route(request, env, ctx) {
       request.method === "GET" &&
       (url.pathname === "/resolve" || url.pathname === "/deezer" ||
        url.pathname === "/spotify" || url.pathname === "/tidal" ||
-       url.pathname === "/bandcamp")
+       url.pathname === "/bandcamp" || url.pathname === "/link")
     ) {
       if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
         return json({ error: "Too many lookups" }, 429, cors());
@@ -1316,6 +1517,9 @@ async function route(request, env, ctx) {
       }
       if (url.pathname === "/bandcamp") {
         return bandcampFind(url.searchParams.get("artist"), url.searchParams.get("title"), ctx);
+      }
+      if (url.pathname === "/link") {
+        return readLink(url.searchParams.get("url"), env, ctx);
       }
       const byId = url.searchParams.get("id");
       return byId
