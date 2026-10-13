@@ -769,13 +769,16 @@ button {
       gap: 0;
     }
     .platform-btn svg, .platform-btn img { width: 18px; height: 18px; }
-    .platform-exact {
-      position: absolute; right: -3px; top: -3px;
-      width: 15px; height: 15px; border-radius: 50%;
-      background: var(--primary); color: #fff;
-      display: inline-flex; align-items: center; justify-content: center;
-      border: 2px solid var(--surface);
+    /* The exception is marked, not the rule. Every exact link used to carry a
+       filled purple tick on its corner, and once ISRCs made exact the normal
+       case that was four badges on four icons - read on a real phone 12 Oct
+       as crude. Now an exact link is just its logo, and a link that only
+       searches carries a small grey magnifier inside its own corner. */
+    .platform-search {
+      position: absolute; right: 3px; bottom: 2px;   /* clear of an 18px logo centred in 44x34 */
+      display: inline-flex; color: var(--muted); pointer-events: none;
     }
+    .platform-btn .platform-search svg { width: 10px; height: 10px; }
 
     .detail-actions {
       position: sticky; bottom: 0; z-index: 2;
@@ -917,6 +920,96 @@ button {
       0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.3); }
       50% { box-shadow: 0 0 0 12px rgba(248,113,113,0); }
     }
+
+    /* ── Heard card ─────────────────────────────────────────────────
+       The answer to "what is this song", put where the listen button was.
+       Found on a real phone 11 Oct: the answer used to land in the form below
+       the listen button, so the places to open it were under the fold and the
+       toast saying it was saved sat on top of what was left.
+
+       Not drawn from scratch. It is Cinemail's film detail card (app/index.html,
+       the detail view: poster beside .modal-title and a muted meta line, a
+       .crew-label over a row of places to watch, then .modal-actions with
+       .btn-modal-primary and .btn-modal-secondary stacked full width), because
+       a film and a song are the same object to these two apps. The numbers
+       below are Cinemail's; only the colour tokens are Tunemail's. Ask the
+       Cinemail session before changing one side, or the family stops agreeing. */
+    #paste-link-row { display: flex; gap: 8px; }   /* here, not inline: an inline display beats the hide below */
+    #recognise-block { margin-top: 24px; text-align: center; }
+    #recognise-block [hidden] { display: none; }   /* the base button rule sets display, which beats the UA [hidden] */
+    /* While a song is on screen the tab shows that song and nothing else. */
+    #tab-search.heard-mode #paste-link-row,
+    #tab-search.heard-mode #manual-entry { display: none; }
+    #tab-search.heard-mode #recognise-block { margin-top: 0; }
+    .heard-card {
+      position: relative;
+      background: var(--surface2); border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px; padding: 16px; text-align: left;
+    }
+    .heard-close {
+      position: absolute; top: 4px; right: 4px;
+      width: 44px; height: 44px; padding: 0;
+      background: none; border: none; cursor: pointer; color: var(--muted);
+    }
+    .heard-close:hover { color: var(--text); }
+    .heard-text { flex: 1; min-width: 0; padding-right: 26px; }   /* clear of the close button */
+    .heard-top { display: flex; gap: 14px; margin-bottom: 14px; }
+    .heard-art {
+      width: 90px; height: 90px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
+      background: rgba(255,255,255,0.05); color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .heard-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Cinemail's detail title, scoped: Tunemail's own .modal-title is the header
+       of its sheets and stays as it is. */
+    .heard-card .modal-title {
+      font-size: 22px; letter-spacing: 0.5px; line-height: 1.15;
+      color: var(--text); overflow-wrap: anywhere;
+    }
+    .heard-artist { color: var(--muted-strong); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+    .heard-saved {
+      display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+      min-height: 44px; font-size: 12px; color: var(--muted);
+    }
+    .heard-saved svg { color: var(--primary-text); margin-right: 4px; flex-shrink: 0; }
+    /* A word-sized control with a full-size target: the padding and the
+       negative margin give it 44px without pushing the line apart. */
+    .heard-undo {
+      min-height: 44px; padding: 0 10px; margin-left: 2px;
+      background: none; border: none; cursor: pointer;
+      color: var(--primary-text); font-family: var(--font-text); font-size: 12px; font-weight: 600;
+    }
+    .heard-card .platform-links { margin-top: 7px; }
+    .crew-label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 600; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 18px; }
+    .btn-modal-primary, .btn-modal-secondary { min-height: 44px; box-sizing: border-box; text-decoration: none;
+      width: 100%; padding: 13px; border-radius: 11px;
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+      font-family: var(--font-display);
+      font-size: 16px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.15s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-modal-primary:hover { border-color: var(--primary-border); background: var(--primary-soft); }
+    .btn-modal-secondary:hover { border-color: rgba(245,197,24,0.3); background: rgba(245,197,24,0.08); }
+    .btn-modal-primary:disabled, .btn-modal-secondary:disabled { cursor: default; opacity: 0.7; }
+    .bm-ico { display: inline-flex; align-items: center; }
+    /* The label is a flex item, and text-box-trim on the button does not
+       reach into it (not inherited). Measured: 13.6px above the caps, 16.8
+       below. Trimmed here: 15.2 and 15.2. */
+    .bm-label { text-box: trim-both cap alphabetic; }
+    .btn-modal-primary .bm-ico { color: var(--primary-text); }
+    .btn-modal-secondary .bm-ico { color: var(--accent); }
+    /* A button, not a link-coloured line: on a real phone it read as text. */
+    .heard-again {
+      width: 100%; min-height: 48px; margin-top: 12px; padding: 13px; gap: 8px;
+      border-radius: 11px; border: 1px solid var(--primary-border); background: var(--primary-soft);
+      color: var(--text); font-family: var(--font-display);
+      font-size: 16px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .heard-again:hover { border-color: rgba(124,58,237,0.55); background: rgba(124,58,237,0.18); }
+    .heard-again .bm-ico { color: var(--primary-text); }
+    #heard-open .bm-ico svg, #heard-open .bm-ico img { width: 18px; height: 18px; }
 
     /* ── Genre Pills ────────────────────────────────────────────────── */
     .genre-pills { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1973,18 +2066,22 @@ button {
         <span class="section-title">Add a Track</span>
       </div>
       <div class="form-group" id="paste-link-group">
-        <label>Paste a link <span class="text-muted" style="font-family:DM Sans;font-size:11px;letter-spacing:0">(Spotify, Apple Music, YouTube, Deezer, SoundCloud, Tidal)</span></label>
-        <div style="display:flex;gap:8px">
+        <!-- The label lives in the field now. It took a line of its own plus a
+             second line of platform names, which on a small phone was the
+             room the recognised song needed. The full list stays in the
+             accessible name, where a screen reader still hears it. -->
+        <div id="paste-link-row">
           <div class="input-icon-wrap" style="flex:1">
             <span class="input-icon"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
-            <input type="text" id="paste-link-input" placeholder="https://open.spotify.com/track/…" autocomplete="off" />
+            <input type="text" id="paste-link-input" placeholder="Paste from any streaming app" aria-label="Paste a link from Spotify, Apple Music, YouTube, Deezer, SoundCloud or Tidal" autocomplete="off" inputmode="url" autocapitalize="off" spellcheck="false" />
           </div>
           <button class="btn btn-secondary btn-sm" id="btn-parse-link" style="white-space:nowrap">↵ Fill</button>
         </div>
         <!-- Recognition. Removed from the page at startup when AUDD_ENABLED is
              false - the whole block, label included, so there is no orphan
              "or let me hear" above nothing. -->
-        <div id="recognise-block" style="margin-top:32px;text-align:center">
+        <div id="recognise-block">
+          <div id="recognise-listen">
           <div style="font-size:11px;color:var(--muted);font-family:DM Sans;margin-bottom:10px;letter-spacing:0.3px">or let me hear</div>
           <button id="btn-recognise" aria-label="Identify the song playing nearby" title="Identify song playing nearby" style="
             width:68px;height:68px;border-radius:50%;border:none;cursor:pointer;
@@ -2002,8 +2099,34 @@ button {
             <span style="font-family:var(--font-text);font-size:10px;font-weight:700;letter-spacing:.08em;line-height:1">TAP</span>
           </button>
           <div id="recognise-status" style="font-size:11px;color:#a78bfa;font-family:DM Sans;margin-top:10px;min-height:16px"></div>
+          </div>
+          <!-- What was heard, in place of the button that heard it. Filled by
+               heardShow(); see the CSS note on .heard-card for where it comes from. -->
+          <div id="heard-card" class="heard-card" hidden aria-live="polite">
+            <button class="heard-close" id="heard-close" aria-label="Close, back to adding a track"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            <div class="heard-top">
+              <div class="heard-art" id="heard-art"></div>
+              <div class="heard-text">
+                <div class="modal-title" id="heard-title"></div>
+                <div class="heard-artist" id="heard-artist"></div>
+                <div class="heard-saved" id="heard-saved"></div>
+              </div>
+            </div>
+            <div class="crew-label">Open in</div>
+            <div class="platform-links" id="heard-links"></div>
+            <div class="modal-actions">
+              <a class="btn-modal-primary" id="heard-open" hidden target="_blank" rel="noopener"><span class="bm-ico"></span> <span class="bm-label"></span></a>
+              <button class="btn-modal-secondary" id="heard-apple" hidden><span class="bm-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span> <span class="bm-label">Add to Apple Music</span></button>
+              <button class="btn-modal-secondary" id="heard-share"><span class="bm-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7M21 3l-9 9M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg></span> <span class="bm-label">Share</span></button>
+            </div>
+          </div>
+          <button class="heard-again" id="heard-again" hidden><span class="bm-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a7 7 0 0 1 7 7c0 3-1.5 5-3.5 6.5S13 18 13 20.5a1.5 1.5 0 0 1-3 0"/><path d="M9 9a3 3 0 0 1 6 0c0 2-1 3-2.5 4S10 15 10 17"/><circle cx="10" cy="20" r="1" fill="currentColor" stroke="none"/></svg></span> <span class="bm-label">Listen again</span></button>
         </div>
       </div>
+      <!-- Everything below is put away while a recognised song is on screen
+           (#tab-search.heard-mode): fields that cannot act on the song above
+           them read as broken, and on a real phone they did. -->
+      <div id="manual-entry">
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0">
         <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
         <span style="font-size:11px;color:var(--muted);font-family:DM Sans">or enter manually</span>
@@ -2055,6 +2178,7 @@ button {
       </div>
 
       <div id="search-empty"></div>
+      </div>
     </div>
 
     <!-- ── TAB: Playlists ───────────────────────────────────────────── -->
@@ -2691,8 +2815,10 @@ function setLoading(btnId, loading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
-  btn._origText = btn._origText || btn.textContent;
-  btn.textContent = loading ? '...' : btn._origText;
+  // innerHTML, not textContent: a button with an icon got its label back
+  // without the icon, so Share Track lost its glyph after the first share.
+  if (btn._origHTML === undefined) btn._origHTML = btn.innerHTML;
+  btn.innerHTML = loading ? '...' : btn._origHTML;
 }
 
 // ── Show auth error ───────────────────────────────────────────────────
@@ -2911,7 +3037,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v90';
+const APP_BUILD = 'v91';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3598,6 +3724,14 @@ async function enrichTrack(t) {
         exact: true,
       };
     }
+    // Bandcamp needs no ISRC but costs a request per track, and a 41-track
+    // playlist already spends most of the per-minute lookup budget. So it is
+    // asked only for someone who actually opens Bandcamp; what they find
+    // reaches everyone else through the shared link cache.
+    if (recentServices().includes('bandcamp')) {
+      const bc = await resolveBandcamp(t.artist, t.track_name);
+      if (!lookupFailed(bc) && bc) extra.bandcamp = bc;
+    }
     if (!out || !out.artwork || !out.preview) {
       const it = await lookupItunes(t.artist, t.track_name);
       if (lookupFailed(it)) failed = true;
@@ -3651,6 +3785,29 @@ async function resolveProviderByIsrc(kind, isrc) {
     return url || null;
   } catch (e) {
     console.warn(`${kind} resolve:`, e.message);
+    return LOOKUP_FAILED;
+  }
+}
+
+// Bandcamp by name, through the worker, which accepts a hit only from the
+// artist's own Bandcamp page (see bandcampFind there for why a name match alone
+// sent people to a stranger's cover). The shape is checked again here, so
+// nothing but a track page on a bandcamp.com subdomain can become a link.
+const bandcampCache = new Map();
+
+async function resolveBandcamp(artist, title) {
+  if (!artist || !title) return null;
+  const key = `${artist}\u0000${title}`.toLowerCase();
+  if (bandcampCache.has(key)) return bandcampCache.get(key);
+  try {
+    const res = await fetch(`${MUSIC_NIGHT_WORKER}/bandcamp?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
+    const d = await res.json().catch(() => null);
+    if (!res.ok || d?.error) { console.warn('bandcamp:', d?.error || res.status); return LOOKUP_FAILED; }
+    const url = d?.found && URL_SHAPE.bandcamp.test(d.bandcamp || '') ? d.bandcamp : null;
+    bandcampCache.set(key, url);
+    return url;
+  } catch (e) {
+    console.warn('bandcamp resolve:', e.message);
     return LOOKUP_FAILED;
   }
 }
@@ -3710,18 +3867,42 @@ function mergeExactLinks(track, enriched) {
 //
 // It used to be the first four of a fixed list, and after the ISRC pipeline
 // grew that became actively wrong: measured on the shared JAZZ playlist, the
-// visible four were Spotify, Apple, YouTube and Bandcamp - and Bandcamp can
-// never be exact, while Deezer and Tidal, which we now resolve exactly by ISRC,
+// visible four were Spotify, Apple, YouTube and Bandcamp - and Bandcamp could
+// not be exact then (it can now, see resolveBandcamp), while Deezer and Tidal, which we now resolve exactly by ISRC,
 // were hidden behind "+ More". The app was showing a guess and hiding a
 // certainty.
 //
-// Exact first, in the list's own order within each group, so the order is
-// stable for a given track and never shuffles between renders. A person who
-// taps the first button should land on the recording, not on a search for it.
+// The person's own services come first, most recent first; then exact links,
+// then searches, in the list's own order within each group. A search in the
+// app someone uses beats an exact link in an app they do not have - and a
+// reviewer with two services, or someone halfway through switching, gets both
+// at the front rather than one of them behind "+ More". Otherwise the order
+// is stable for a given track: it changes only when they open a platform.
 function orderPlatforms(list, hrefFor) {
+  const mine = recentServices().map(id => list.find(p => p.id === id)).filter(Boolean);
   const exact = [], search = [];
-  for (const p of list) (isExactHref(hrefFor(p)) ? exact : search).push(p);
-  return exact.concat(search);
+  for (const p of list) {
+    if (mine.includes(p)) continue;
+    (isExactHref(hrefFor(p)) ? exact : search).push(p);
+  }
+  return mine.concat(exact, search);
+}
+
+// The services this person listens with: the platform icons they have opened,
+// anywhere in the app, most recent first. Learned rather than asked, so there
+// is no settings screen to find. Per device on purpose - a phone that plays
+// Spotify and a laptop that plays Apple Music should each remember their own.
+const RECENT_SERVICES_KEY = 'tunemail_services';
+const RECENT_SERVICES_MAX = 3;
+function recentServices() {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENT_SERVICES_KEY) || '[]');
+    return Array.isArray(v) ? v.filter(id => typeof id === 'string').slice(0, RECENT_SERVICES_MAX) : [];
+  } catch { return []; }
+}
+function rememberService(id) {
+  const list = [id, ...recentServices().filter(x => x !== id)].slice(0, RECENT_SERVICES_MAX);
+  try { localStorage.setItem(RECENT_SERVICES_KEY, JSON.stringify(list)); } catch { /* private mode */ }
 }
 
 function isExactHref(href) {
@@ -3729,23 +3910,26 @@ function isExactHref(href) {
          !href.includes('term=') && !href.includes('text=') && !href.includes('query=');
 }
 
+// The known link for one platform, or null when all we could do is search.
+function platformHrefFor(p, odesliLinks, directUrls) {
+  if (directUrls) {
+    const k = ODESLI_PLATFORM_MAP_REVERSE[p.id];
+    if (k && directUrls[k]) return directUrls[k];
+    if (directUrls[p.id]) return directUrls[p.id];
+  }
+  if (odesliLinks) {
+    if (odesliLinks[p.id]) return odesliLinks[p.id];
+    for (const [oKey, mKey] of Object.entries(ODESLI_PLATFORM_MAP || {})) {
+      if (mKey === p.id && odesliLinks[oKey]) return odesliLinks[oKey];
+    }
+  }
+  return null;
+}
+
 function buildPlatformLinksHtml(artist, trackName, odesliLinks, showAll = false, directUrls = null) {
   // Resolve every platform's href first, then decide which four are worth the
   // space. Doing it the other way round is what hid the exact ones.
-  const hrefFor = (p) => {
-    if (directUrls) {
-      const k = ODESLI_PLATFORM_MAP_REVERSE[p.id];
-      if (k && directUrls[k]) return directUrls[k];
-      if (directUrls[p.id]) return directUrls[p.id];
-    }
-    if (odesliLinks) {
-      if (odesliLinks[p.id]) return odesliLinks[p.id];
-      for (const [oKey, mKey] of Object.entries(ODESLI_PLATFORM_MAP || {})) {
-        if (mKey === p.id && odesliLinks[oKey]) return odesliLinks[oKey];
-      }
-    }
-    return null;
-  };
+  const hrefFor = (p) => platformHrefFor(p, odesliLinks, directUrls);
   const ordered = orderPlatforms(STREAMING_PLATFORMS, hrefFor);
   const list = showAll ? ordered : ordered.slice(0, TOP_PLATFORMS);
   return list.map(p => {
@@ -3775,13 +3959,13 @@ function buildPlatformLinksHtml(artist, trackName, odesliLinks, showAll = false,
     // one track was more than double what it needed to be. A platform logo is
     // built to be recognised without its name; the name moves to the label a
     // screen reader and a tooltip read.
-    const exactMark = isExact
-      ? '<span class="platform-exact" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>'
-      : '';
+    const searchMark = isExact
+      ? ''
+      : '<span class="platform-search" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>';
     return `<a href="${safeUrl(href)}" target="_blank" rel="noopener"
-      class="platform-btn${isExact ? ' is-exact' : ''}"
-      title="${escHtml(p.name)}${isExact ? ' - exact link' : ''}"
-      aria-label="Open on ${escHtml(p.name)}${isExact ? ', exact link' : ''}">${p.icon}${exactMark}</a>`;
+      class="platform-btn${isExact ? ' is-exact' : ''}" data-platform="${p.id}"
+      title="${escHtml(p.name)}${isExact ? '' : ' - search'}"
+      aria-label="Open on ${escHtml(p.name)}${isExact ? '' : ', search results'}">${p.icon}${searchMark}</a>`;
   }).join('');
 }
 
@@ -3809,14 +3993,14 @@ document.getElementById('btn-expand-platforms').addEventListener('click', () => 
 });
 
 // ── Search: share single track link ──────────────────────────────────
-document.getElementById('btn-share-track').addEventListener('click', async () => {
+// Shared by the form's Share Track and the Heard card's Share. `extra` carries
+// the ISRC and the exact links when they are known, so the page a friend opens
+// lands on the recording rather than on five searches.
+async function shareSingleTrack(btnId, artist, track, genre, extra = {}) {
   if (!requireAccount('share a track')) return;
-  const artist = document.getElementById('search-artist').value.trim();
-  const track  = document.getElementById('search-track').value.trim();
-  const genre  = getGenreValue();
   if (!artist || !track) return;
 
-  setLoading('btn-share-track', true);
+  setLoading(btnId, true);
   try {
     // Save as a single-track public playlist with auto-slug
     const slug = generateSlug();
@@ -3828,17 +4012,27 @@ document.getElementById('btn-share-track').addEventListener('click', async () =>
       .single();
     if (plErr) throw plErr;
 
-    await sbClient.from('playlist_tracks').insert({
-      playlist_id: pl.id, artist, track_name: track, genre: genre || null, position: 0
+    const { error: trErr } = await sbClient.from('playlist_tracks').insert({
+      playlist_id: pl.id, artist, track_name: track, genre: genre || null, position: 0,
+      isrc: extra.isrc || null,
+      direct_urls: extra.direct_urls && Object.keys(extra.direct_urls).length ? extra.direct_urls : null,
     });
+    if (trErr) throw trErr;
 
     await copyToClipboard(shareUrl(slug), 'Track link copied');
     await loadPlaylists();
   } catch (err) {
     showToast('Error: ' + err.message);
   }
-  setLoading('btn-share-track', false);
-});
+  setLoading(btnId, false);
+}
+
+document.getElementById('btn-share-track').addEventListener('click', () => shareSingleTrack(
+  'btn-share-track',
+  document.getElementById('search-artist').value.trim(),
+  document.getElementById('search-track').value.trim(),
+  getGenreValue(),
+));
 
 // ── Tracks: add to playlist ───────────────────────────────────────────
 document.getElementById('btn-add-track').addEventListener('click', async () => {
@@ -5088,6 +5282,168 @@ async function saveHeardTrack(r) {
   return { id: made.id, playlistId };
 }
 
+// ── The Heard card ───────────────────────────────────────────────────
+// One recognition on screen at a time. Anything that lands later - a link
+// lookup, the save, a tap on Apple Music - checks `heard` is still the object
+// it started with before touching the card, so a slow answer about the last
+// song can never paint over this one.
+let heard = null;
+
+const HEARD_NOTE = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+const HEARD_TICK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+function heardShow(r) {
+  heard = { r, links: r.appleMusicUrl ? { appleMusic: r.appleMusicUrl } : {}, rowId: null, expanded: false };
+  const mine = heard;
+
+  // The note until the cover arrives, and for good if it never does: a broken
+  // image icon in the one place the eye goes first is worse than no picture.
+  const art = document.getElementById('heard-art');
+  art.innerHTML = HEARD_NOTE;
+  if (/^https:\/\//i.test(r.artworkUrl || '')) {
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => { if (heard === mine) art.replaceChildren(img); };
+    img.src = r.artworkUrl;
+  }
+
+  document.getElementById('heard-title').textContent = r.title || 'Unknown title';
+  document.getElementById('heard-artist').textContent = r.artist || '';
+  heardSaved(currentUser ? 'saving' : 'guest');
+
+  const apple = document.getElementById('heard-apple');
+  apple.disabled = false;
+  apple.querySelector('.bm-ico').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  apple.querySelector('.bm-label').textContent = 'Add to Apple Music';
+  heardPaintLinks();
+
+  document.getElementById('recognise-listen').hidden = true;
+  document.getElementById('heard-card').hidden = false;
+  document.getElementById('heard-again').hidden = false;
+  document.getElementById('tab-search').classList.add('heard-mode');
+  window.scrollTo(0, 0);
+}
+
+// Null-safe: the whole block is removed from builds with no recogniser, and
+// sign-out calls this either way.
+function heardHide() {
+  heard = null;
+  const card = document.getElementById('heard-card');
+  if (!card) return;
+  card.hidden = true;
+  document.getElementById('heard-again').hidden = true;
+  document.getElementById('recognise-listen').hidden = false;
+  document.getElementById('tab-search').classList.remove('heard-mode');
+}
+
+// The card's big button is the most recent of recentServices() (see
+// orderPlatforms), said back by name ("Open in Spotify"), so a wrong guess is
+// visible and one tap on another icon corrects it. Someone who just switched
+// services is right again after a single tap.
+//
+// Why at all: the card offered "Also to Apple Music" to everyone, and to a
+// Spotify listener that is a button about somebody else's app.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-platform]');
+  if (!a) return;
+  rememberService(a.dataset.platform);
+  // Repainted after the tap has gone through, not during it.
+  if (heard) setTimeout(heardPaintLinks, 0);
+});
+
+function heardPaintLinks() {
+  if (!heard) return;
+  const { r, links, expanded } = heard;
+  document.getElementById('heard-links').innerHTML =
+    buildPlatformLinksHtml(r.artist || '', r.title || '', null, expanded, links) +
+    `<button class="platform-expand" data-heard-more>${expanded ? '− Less' : '+ More'}</button>`;
+
+  // One big way into the app they actually use, when we know which it is.
+  const svc = STREAMING_PLATFORMS.find(p => p.id === recentServices()[0]);
+  const open = document.getElementById('heard-open');
+  open.hidden = !svc;
+  if (svc) {
+    const href = platformHrefFor(svc, null, links) || svc.url(r.artist || '', r.title || '');
+    open.href = /^https?:\/\//i.test(href) ? href : '#';
+    open.dataset.platform = svc.id;
+    open.querySelector('.bm-ico').innerHTML = svc.icon;
+    // The label says where it goes. Found on a real phone 13 Oct: "Open in
+    // Bandcamp" for a Gainsbourg song, which is not on Bandcamp, opened a page
+    // of other people's covers. The small icons mark a search with a
+    // magnifier; the big button has to say it in words.
+    open.querySelector('.bm-label').textContent =
+      isExactHref(href) ? `Open in ${svc.name}` : `Search ${svc.name}`;
+  }
+
+  // Adding to a library is offered only to someone whose library it is.
+  document.getElementById('heard-apple').hidden =
+    !(svc?.id === 'apple' && APPLE_MUSIC && r.isrc);
+}
+
+// What happened to the save, said inside the card. This used to be a toast,
+// and on a real phone the toast covered the answer it was announcing.
+function heardSaved(state, detail = '') {
+  const el = document.getElementById('heard-saved');
+  const say = {
+    saving:  `Saving to ${HEARD_PLAYLIST}…`,
+    saved:   `${HEARD_TICK}Saved to ${HEARD_PLAYLIST}`,
+    already: `${HEARD_TICK}Already in ${HEARD_PLAYLIST}`,
+    removed: `Removed from ${HEARD_PLAYLIST}`,
+    guest:   'Sign in to keep it',
+    failed:  `Not saved: ${escHtml(detail)}`,
+  }[state] || '';
+  el.innerHTML = say + (state === 'saved' ? '<button class="heard-undo" data-heard-undo>Undo</button>' : '');
+}
+
+document.getElementById('heard-card')?.addEventListener('click', async (e) => {
+  const h = heard;
+  if (!h) return;
+  if (e.target.closest('[data-heard-more]')) {
+    h.expanded = !h.expanded;
+    heardPaintLinks();
+    return;
+  }
+  if (e.target.closest('[data-heard-undo]')) {
+    if (!h.rowId) return;
+    try {
+      const { error } = await sbClient.from('playlist_tracks').delete().eq('id', h.rowId);
+      if (error) throw error;
+      h.rowId = null;
+      if (heard === h) heardSaved('removed');
+      await loadPlaylists();
+    } catch (err) { showToast('Could not undo: ' + err.message); }
+  }
+});
+
+document.getElementById('heard-apple')?.addEventListener('click', async (e) => {
+  const h = heard;
+  if (!h) return;
+  const btn = e.currentTarget;
+  const label = btn.querySelector('.bm-label');
+  btn.disabled = true;
+  const out = await addToAppleMusic(h.r, (msg) => { if (heard === h) label.textContent = msg; });
+  if (heard !== h) return;
+  if (out === 'done') btn.querySelector('.bm-ico').innerHTML = HEARD_TICK;
+  if (out === 'retry') btn.disabled = false;
+});
+
+// The exact links go with it, so the page a friend opens lands on the
+// recording rather than on a row of searches.
+document.getElementById('heard-share')?.addEventListener('click', () => {
+  const h = heard;
+  if (!h) return;
+  shareSingleTrack('heard-share', h.r.artist || '', h.r.title || '', null,
+    { isrc: h.r.isrc, direct_urls: { ...h.links } });
+});
+
+// Back to the ordinary tab. The song is already saved; nothing is lost.
+document.getElementById('heard-close')?.addEventListener('click', heardHide);
+
+document.getElementById('heard-again')?.addEventListener('click', () => {
+  heardHide();
+  _recBtn?.click();
+});
+
 // ── ShazamKit ────────────────────────────────────────────────────────
 // The plugin does the listening, the timing and the microphone prompt, so
 // there is no MediaRecorder here and nothing to clean up if it throws.
@@ -5116,14 +5472,11 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
       return;
     }
 
-    document.getElementById('search-artist').value = r.artist || '';
-    document.getElementById('search-track').value = r.title || '';
-
-    // ShazamKit gives Apple Music directly and, more usefully, the ISRC - the
-    // one identifier every other service can be asked with. The rest of the
-    // links come from the pipeline the app already has for it.
-    pendingDirectUrls = {};
-    if (r.appleMusicUrl) pendingDirectUrls.appleMusic = r.appleMusicUrl;
+    // The answer goes where the question was asked. It used to fill the form
+    // below, which put the places to open it under the fold on every phone.
+    auddStatus('');
+    heardShow(r);
+    const mine = heard;
 
     // Settles with the id of the row THIS recognition saved, or null. The link
     // lookups below wait on it rather than reading a shared "last saved" value:
@@ -5132,96 +5485,61 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
     let settleSaved;
     const thisRowId = new Promise((res) => { settleSaved = res; });
 
-    // The other three, by ISRC, right now - not later when the playlist is
-    // opened. Found on a real phone 11 Oct: after a match only Apple Music had
-    // the exact-link tick, because ShazamKit itself returns only the Apple URL
-    // and the Spotify, Tidal and Deezer lookups ran only during playlist
-    // enrichment. But this is the moment that matters - heard it, open it in
-    // what I use - so the lookups happen here, in parallel, and the preview is
-    // repainted when they land.
-    if (r.isrc) {
-      Promise.all([
-        resolveProviderByIsrc('spotify', r.isrc),
-        resolveProviderByIsrc('tidal', r.isrc),
-        resolveByIsrc(r.isrc),
-      ]).then(([sp, td, dz]) => {
-        if (!pendingDirectUrls) pendingDirectUrls = {};
-        if (sp && !lookupFailed(sp)) pendingDirectUrls.spotify = sp;
-        if (td && !lookupFailed(td)) pendingDirectUrls.tidal = td;
-        if (dz && !lookupFailed(dz) && dz.deezer) pendingDirectUrls.deezer = dz.deezer;
-        updateSearchPreview();
-        // And into the row this recognition saved - awaited, never guessed.
-        const links = { ...pendingDirectUrls };
-        return thisRowId.then((rowId) => {
-          if (!rowId || !currentUser) return;
-          return sbClient.from('playlist_tracks')
-            .update({ direct_urls: links })
-            .eq('id', rowId)
-            .then(({ error }) => { if (error) console.warn('heard links:', error.message); });
-        });
-      }).catch(e => console.warn('exact links after match:', e.message));
-    }
-
     if (r.artist && r.title && currentUser) {
+      // No isrc key at all when there is none: the row is shared, and writing
+      // null would erase an ISRC somebody else's lookup already found.
       trackLinksCacheSet(r.artist, r.title, {
-        isrc: r.isrc || null,
-        direct_urls: Object.keys(pendingDirectUrls).length ? pendingDirectUrls : null,
+        ...(r.isrc ? { isrc: r.isrc } : {}),
+        direct_urls: Object.keys(mine.links).length ? { ...mine.links } : null,
       });
     }
 
-    updateSearchPreview();
+    // The other services, right now - not later when the playlist is opened.
+    // Found on a real phone 11 Oct: after a match only Apple Music had an exact
+    // link, because ShazamKit itself returns only the Apple URL. This is the
+    // moment that matters - heard it, open it in what I use - so the lookups
+    // happen here, in parallel, and the card repaints when they land. Three
+    // need the ISRC; Bandcamp is asked by name, so it runs even without one.
+    Promise.all([
+      r.isrc ? resolveProviderByIsrc('spotify', r.isrc) : null,
+      r.isrc ? resolveProviderByIsrc('tidal', r.isrc) : null,
+      r.isrc ? resolveByIsrc(r.isrc) : null,
+      resolveBandcamp(r.artist, r.title),
+    ]).then(([sp, td, dz, bc]) => {
+      if (sp && !lookupFailed(sp)) mine.links.spotify = sp;
+      if (td && !lookupFailed(td)) mine.links.tidal = td;
+      if (dz && !lookupFailed(dz) && dz.deezer) mine.links.deezer = dz.deezer;
+      if (bc && !lookupFailed(bc)) mine.links.bandcamp = bc;
+      if (heard === mine) heardPaintLinks();
+      const links = { ...mine.links };
+      if (r.artist && r.title && currentUser && Object.keys(links).length) {
+        trackLinksCacheSet(r.artist, r.title, { ...(r.isrc ? { isrc: r.isrc } : {}), direct_urls: links });
+      }
+      // And into the row this recognition saved - awaited, never guessed.
+      return thisRowId.then((rowId) => {
+        if (!rowId || !currentUser || !Object.keys(links).length) return;
+        return sbClient.from('playlist_tracks')
+          .update({ direct_urls: links })
+          .eq('id', rowId)
+          .then(({ error }) => { if (error) console.warn('heard links:', error.message); });
+      });
+    }).catch(e => console.warn('exact links after match:', e.message));
 
-    // One tap ends here: the track is already saved. The fields above stay
-    // filled so the older path - pick a different playlist, share it, edit the
-    // genre - is still open to anyone who wants it.
-    const what = `${r.title || 'that'} - ${r.artist || ''}`.trim();
     if (!currentUser) {
       settleSaved(null);
-      auddStatus('Found it. Sign in to keep it.');
-      setTimeout(() => auddStatus(''), 6000);
     } else {
       try {
         const saved = await saveHeardTrack(r);
-        settleSaved(saved.already ? null : (saved.id || null));
+        mine.rowId = saved.already ? null : (saved.id || null);
+        settleSaved(mine.rowId);
+        if (heard === mine) heardSaved(saved.already ? 'already' : 'saved');
         await loadPlaylists();
-        if (saved.already) {
-          auddStatus('Already in Heard');
-          setTimeout(() => auddStatus(''), 4000);
-        } else {
-          auddStatus(pick(RECOGNISE_WIN));
-          setTimeout(() => auddStatus(''), 4000);
-          // Two different offers, and which one appears depends on what this
-          // build and this person can actually do.
-          //
-          // With Apple Music reachable and an ISRC in hand, the second tap is
-          // worth offering: it puts the song in the library they actually
-          // listen with, which is what Shazam does and what a link does not.
-          // Without it, the only thing worth offering is Undo.
-          const canAdd = !!(APPLE_MUSIC && r.isrc);
-          showToast(`Added to ${HEARD_PLAYLIST} - ${what}`, canAdd ? 8000 : 6000,
-            canAdd ? {
-              label: 'Also to Apple Music',
-              onClick: () => addToAppleMusic(r),
-            } : {
-              // Undo, because a save nobody confirmed needs a way back that
-              // does not involve finding the playlist and deleting a row.
-              label: 'Undo',
-              onClick: async () => {
-                try {
-                  await sbClient.from('playlist_tracks').delete().eq('id', saved.id);
-                  await loadPlaylists();
-                  showToast('Removed');
-                } catch (err) { showToast('Could not undo: ' + err.message); }
-              },
-            });
-        }
       } catch (err) {
         // Recognition worked; only the saving failed. Say which, or the person
         // retries the listening that already succeeded.
         settleSaved(null);
         console.warn('save heard:', err.message);
-        auddStatus('Found it, but could not save: ' + err.message);
-        setTimeout(() => auddStatus(''), 6000);
+        if (heard === mine) heardSaved('failed', err.message);
       }
     }
 
@@ -5240,27 +5558,35 @@ if (RECOGNISER === 'shazam' && _recBtn) _recBtn.addEventListener('click', async 
 // Asks for permission at the moment it is needed and not before. A music
 // permission dialog on first launch, before the app has done anything for
 // anyone, is the fastest way to be refused for ever.
-async function addToAppleMusic(r) {
-  if (!APPLE_MUSIC || !r?.isrc) return;
+//
+// `say` is where the outcome is spoken - the card's own button now, rather
+// than a toast. Returns 'done', 'final' (nothing more to try) or 'retry'.
+async function addToAppleMusic(r, say = showToast) {
+  if (!APPLE_MUSIC || !r?.isrc) return 'final';
   try {
     const st = await APPLE_MUSIC.status();
-    if (!st?.available) { showToast('Adding to Apple Music needs iOS 16 or later'); return; }
+    if (!st?.available) { say('Needs iOS 16 or later'); return 'final'; }
     if (!st.authorized) {
       const granted = await APPLE_MUSIC.authorize();
       if (!granted?.authorized) {
-        showToast('Apple Music access was not granted');
-        return;
+        // iOS asks once. After a refusal the request answers "denied" without
+        // showing anything, so the only way forward is Settings - say that.
+        say('Allow Apple Music in Settings');
+        return 'retry';
       }
     }
-    showToast('Adding to Apple Music…', 4000);
+    say('Adding…');
     const res = await APPLE_MUSIC.addByIsrc({ isrc: r.isrc });
-    if (res?.added) showToast('In your Apple Music library');
+    if (res?.added) { say('In your Apple Music'); return 'done'; }
     // Not in Apple's catalogue is an ordinary outcome, not a fault, and it is
     // said as such - the track is still saved in Heard either way.
-    else if (res?.reason === 'notInCatalog') showToast('Not in the Apple Music catalogue');
-    else showToast('Could not add to Apple Music');
+    if (res?.reason === 'notInCatalog') { say('Not in Apple Music'); return 'final'; }
+    say('Could not add, try again');
+    return 'retry';
   } catch (e) {
-    showToast(e?.message || 'Could not add to Apple Music');
+    console.warn('apple music add:', e?.message);
+    say('Could not add, try again');
+    return 'retry';
   }
 }
 
@@ -5855,8 +6181,9 @@ if (_delConfirm) _delConfirm.addEventListener('click', async () => {
 // reaches the SIGNED_OUT branch of the listener without passing this button.
 function clearPersonalStorage() {
   clearRecovery();
+  heardHide();   // the last person's song, and an Undo that pointed at their row
   try {
-    ['spotify_token', 'spotify_verifier', 'spotify_verifier_ts', 'tunemail_pending_copy']
+    ['spotify_token', 'spotify_verifier', 'spotify_verifier_ts', 'tunemail_pending_copy', 'tunemail_services']
       .forEach(k => localStorage.removeItem(k));
   } catch (e) { /* private mode, or storage blocked: nothing to clear */ }
 }

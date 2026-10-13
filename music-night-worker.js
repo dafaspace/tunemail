@@ -441,6 +441,92 @@ async function resolveIsrc(isrc, env, ctx) {
 }
 
 
+// ── Bandcamp, by name, accepted only from the artist's own page ─────────────
+//
+// GET /bandcamp?artist=...&title=...
+//
+// Bandcamp has no ISRC, so the only question it can answer is "artist and
+// title", and that question has wrong answers. Measured 12 Oct on five songs
+// recognised on a real phone: "Radiohead - Creep" came back, among others, as
+// a track titled "Creep" whose band name is literally "Radiohead", uploaded by
+// an account called filthyhare. Matching names would have sent a listener to a
+// stranger's cover, which for an app whose claim is the exact recording is
+// worse than a search.
+//
+// So a hit counts only when the track lives on the artist's own subdomain
+// (jukkaeskola.bandcamp.com for Jukka Eskola) and both the title and the band
+// name are equal after folding case, accents and punctuation. Covers, edits,
+// label pages and custom domains all stay a search, marked as one. The same
+// five songs under this rule: three found on the artist's page (Jukka Eskola,
+// YIN YIN, Syl Johnson), two correctly refused (the Creep cover, and a fan
+// edit that was the only James Blake result).
+//
+// Also why it is worth having: on an iPhone with iOS 16 the search link opened
+// Bandcamp's empty search page with the query gone, so for most people the
+// search was not even a search.
+//
+// The endpoint is the one Bandcamp's own search box calls; it is not a
+// published API. If it changes shape the answer is found:false and the app
+// keeps the search link it had before - a quiet failure, and a safe one.
+const fold = (s) => String(s || "")
+  .normalize("NFKD").replace(/\p{M}/gu, "")
+  .toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+
+async function bandcampFind(artistRaw, titleRaw, ctx) {
+  const j = (data, status = 200, maxAge = 0) => new Response(JSON.stringify(data), {
+    status,
+    headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": `public, max-age=${maxAge}` },
+  });
+  const artist = String(artistRaw || "").trim().slice(0, 200);
+  const title = String(titleRaw || "").trim().slice(0, 200);
+  const want = fold(artist), wantTitle = fold(title);
+  if (!want || !wantTitle) return j({ error: "artist and title required" }, 400);
+
+  const cacheKey = new Request(`https://cache.tunemail/bandcamp/${want}/${wantTitle}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  let res;
+  try {
+    res = await fetch("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; tunemail/1.0; +https://tunemail.app)",
+      },
+      body: JSON.stringify({ search_text: `${artist} ${title}`, search_filter: "t", full_page: false, fan_id: null }),
+    });
+  } catch {
+    return j({ error: "unreachable" }, 502);
+  }
+  // Failures are said as failures and never cached, here or by the app: a
+  // refusal is not an absence.
+  if (!res.ok) return j({ error: `bandcamp ${res.status}` }, 502);
+  const data = await res.json().catch(() => null);
+  if (!data) return j({ error: "bandcamp answered something that is not JSON" }, 502);
+
+  // "The Cinematic Orchestra" may live at cinematicorchestra.bandcamp.com.
+  const owners = new Set([want, want.replace(/^the(?=.)/, "")]);
+  const results = Array.isArray(data?.auto?.results) ? data.auto.results : [];
+  const found = results.find((r) => {
+    if (r?.type !== "t") return false;
+    let u;
+    try { u = new URL(r.item_url_path); } catch { return false; }
+    const m = u.protocol === "https:" && u.hostname.match(/^([a-z0-9-]+)\.bandcamp\.com$/i);
+    return !!m && owners.has(fold(m[1])) &&
+      fold(r.band_name) === want && fold(r.name) === wantTitle &&
+      /^\/track\/[\w-]+\/?$/.test(u.pathname);
+  });
+
+  // A find is kept for a month; a miss for a day, because a release can appear.
+  const response = found
+    ? j({ found: true, bandcamp: found.item_url_path, album: found.album_name || null }, 200, 86400 * 30)
+    : j({ found: false }, 200, 86400);
+  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
+}
+
 // ── Deezer, which a browser cannot call at all ───────────────────────────────
 // api.deezer.com sends no Access-Control-Allow-Origin, so every fetch to it
 // from the page fails with "TypeError: Failed to fetch" before it reaches the
@@ -1208,12 +1294,13 @@ async function route(request, env, ctx) {
       );
     }
 
-    // The three lookup routes share one per-address budget rather than three,
+    // The lookup routes share one per-address budget rather than one each,
     // because they are one activity: opening a playlist calls all of them.
     if (
       request.method === "GET" &&
       (url.pathname === "/resolve" || url.pathname === "/deezer" ||
-       url.pathname === "/spotify" || url.pathname === "/tidal")
+       url.pathname === "/spotify" || url.pathname === "/tidal" ||
+       url.pathname === "/bandcamp")
     ) {
       if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
         return json({ error: "Too many lookups" }, 429, cors());
@@ -1226,6 +1313,9 @@ async function route(request, env, ctx) {
       }
       if (url.pathname === "/tidal") {
         return lookupByIsrc("tidal", url.searchParams.get("isrc") || "", env, ctx, url.searchParams.get("key"));
+      }
+      if (url.pathname === "/bandcamp") {
+        return bandcampFind(url.searchParams.get("artist"), url.searchParams.get("title"), ctx);
       }
       const byId = url.searchParams.get("id");
       return byId

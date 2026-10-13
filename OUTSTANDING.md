@@ -19,11 +19,13 @@ build reaching a stranger, not by size.
    rather than a search. Measured 15 Sep: 147 of 164 platform links exact on
    the shared JAZZ playlist.
 2. **Hear a song and keep it in one tap.** ShazamKit recognition straight into
-   a list that can be sent. iOS only. **Built, never run on a real device.**
+   a list that can be sent. iOS only. **Runs on a real iPhone (iOS 16.2) since
+   11 Oct**: recognised, saved to Heard, answer shown in a card with the links.
 3. **Bring your music in with its identifiers intact.** CSV with ISRC, round
    trip without loss; the import says whether the file carried ISRCs.
 4. **Put it in the library you actually listen with.** Add to Apple Music via
-   MusicKit. iOS only, Apple Music subscribers only. **Built, never run.**
+   MusicKit. iOS only, and offered only to someone whose service is Apple Music
+   (learned from the icons they open). **Built, never run on a subscriber.**
 
 Anything not on this list is support, and it should be visible that it is.
 
@@ -31,39 +33,35 @@ Anything not on this list is support, and it should be visible that it is.
 
 ## 1. Blockers for a first TestFlight build
 
-### 1.1 Xcode cannot sign - only Dafa can fix this
+### 1.1 What has met reality, and what has not
 
-`xcodebuild` for a device fails with `No Account for Team "BMTR6JW8NW"`. The
-team id is already in the project (taken from the one code-signing identity on
-this machine). What is missing is the Apple ID itself in Xcode, which needs a
-password, so it is his to do:
+Signing works and the app runs on Dafa's iPhone SE (iOS 16.2) from Xcode.
+Checked there, 11-13 Oct:
+- recognition hears real songs (two of five missed before the 15 s,
+  keep-listening fix; James Blake - I Keep Calling, one of the two, was found
+  after it);
+- a match lands in Heard with no second tap, shown in the Heard card with the
+  links visible without scrolling;
+- Spotify, Tidal and Deezer exact by ISRC; Bandcamp exact when the track is on
+  the artist's own page (Bolly Beat opened its track page), a search otherwise.
 
-1. Xcode -> Settings -> Accounts -> + -> Apple ID.
-2. Target App -> Signing & Capabilities -> + Capability -> **ShazamKit**.
-3. developer.apple.com -> Identifiers -> `app.tunemail.mobile` -> **MusicKit**.
+Not yet checked on the device:
+- "Add to Apple Music": needs someone with an Apple Music subscription;
+- account deletion: email confirmation, and it completes;
+- a shared track link opened by someone else, in a messenger.
 
-### 1.2 Functions 2 and 4 have never met reality
+Known broken, in production: **Paste a link.** It calls
+`movie-night-proxy.dafa4me.workers.dev/meta` and `/?url=`, which answer 404
+and 405. The fix is to resolve pasted Spotify, Apple, Deezer and Tidal links
+to an ISRC inside music-night-worker.
 
-Recognition and Apple Music both compile, register with the bridge and answer
-their status calls in the simulator. Neither has heard a real song or added a
-real track, because a simulator has no audio and no subscription. Until they
-run on a real iPhone they are hypotheses, not features, and the listing must
-not mention them.
-
-What to run, in this order:
-- the listen button under real music: does it recognise, and does the track
-  land in Heard with no second tap?
-- "Also to Apple Music": permission prompt, found by ISRC, in the library?
-- a recognised track's Spotify and Tidal buttons: the recording, not a search?
-- account deletion: email confirmation, and it completes rather than failing.
-
-### 1.3 Apple key 74LFLG28G5
+### 1.2 Apple key 74LFLG28G5
 
 A `.p8` private key was committed to a public repo on 3 Sep and removed from
 HEAD. The key itself must be **revoked in the Apple Developer portal**. Never
 confirmed done. Assume it is compromised until it is.
 
-### 1.4 Cloudflare: delete DEBUG_KEY
+### 1.3 Cloudflare: delete DEBUG_KEY
 
 Added 16 Sep only to read why the Spotify token was refused. It gates a
 diagnostic and has no other use. Delete it in Workers -> music-night-worker ->
