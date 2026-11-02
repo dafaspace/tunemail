@@ -56,17 +56,29 @@ their ISRC, Apple Music read by the page, YouTube and SoundCloud by title only.
 Short links (spotify.link, link.deezer.com, on.soundcloud.com) are handled but
 were never tried with a real one.
 
-### 1.2 Apple key 74LFLG28G5
+### 1.2 Apple key 74LFLG28G5 - closed 24 Oct 2026
 
-A `.p8` private key was committed to a public repo on 3 Sep and removed from
-HEAD. The key itself must be **revoked in the Apple Developer portal**. Never
-confirmed done. Assume it is compromised until it is.
+The `.p8` committed to the public repo (82cfbe1, 24 Aug) is revoked. Checked by
+_HQ: a token signed with that file now gets HTTP 401 from Apple. It stays in the
+git history, but it is dead, so no history rewrite is needed.
 
-### 1.3 Cloudflare: delete DEBUG_KEY
+Its replacement is MusicKit key 3GZQ88225M ("Tunemail MusicKit Oct 2026"), bound
+to 3T7QAQD48Q.media.app.tunemail. The `.p8` lives at ~/Keys/AuthKey_3GZQ88225M.p8,
+outside every repo, with a copy in Dafa's Bitwarden.
 
-Added 16 Sep only to read why the Spotify token was refused. It gates a
-diagnostic and has no other use. Delete it in Workers -> music-night-worker ->
-Settings -> Variables and Secrets. Without it the diagnostic answers nobody.
+**Renewal date: the developer token expires 2027-04-25.** It is the worker
+secret APPLE_DEV_TOKEN; when it lapses, /resolve stops finding Apple links.
+Renew with `tools/make-apple-token.mjs` and the same key, then Rotate + Deploy
+the secret in Cloudflare.
+
+### 1.3 Cloudflare: DEBUG_KEY - closed 24 Oct 2026
+
+Deleted. Dafa's screenshot of music-night-worker's Production variables on
+24 Oct shows no DEBUG_KEY; the secrets left are APPLE_DEV_TOKEN,
+SPOTIFY_CLIENT_ID/SECRET, SUPABASE_KEY, TELEGRAM_CHAT_ID/TOKEN/WEBHOOK_SECRET and
+TIDAL_CLIENT_ID/SECRET. The Spotify/Tidal diagnostic now answers nobody, which is
+its safe resting state. The token renewal (1.2) has a reminder in Dafa's Google
+Calendar for 5 Apr 2027.
 
 ---
 

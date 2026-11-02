@@ -1597,6 +1597,89 @@ async function route(request, env, ctx) {
     // POST /feedback-notify - sends the Telegram notification.
     // The client already sends a bearer; before, this route ignored it, so
     // anyone could push arbitrary text into the owner's chat.
+    // POST /feedback-guest - a report from someone with no account.
+    //
+    // The site opens to everyone from 13 Oct, and until now feedback needed an
+    // account: in the phase where most visitors are guests, most visitors had
+    // no way to say anything. Text only (screenshots live in per-user storage),
+    // an optional email so the owner can answer by mail, and two ceilings - per
+    // address, and for the whole day - so an open form cannot turn the owner's
+    // phone into a siren.
+    if (request.method === "POST" && url.pathname === "/feedback-guest") {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Bad request" }, 400, cors()); }
+      if (body?.app !== "music-night") return json({ error: "Bad request" }, 400, cors());
+
+      const message = String(body.message ?? "").trim().slice(0, 3000);
+      if (!message) return json({ error: "Write something first" }, 400, cors());
+      const type = ["bug", "idea", "other"].includes(body.type) ? body.type : "other";
+      const emailRaw = String(body.email ?? "").trim().slice(0, 254);
+      if (emailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+        return json({ error: "That email does not look right" }, 400, cors());
+      }
+
+      if (await overLimit(env, `feedback-guest:${clientIp(request)}`, 5, 3600)) {
+        return json({ error: "Too much feedback in the last hour" }, 429, cors());
+      }
+      if (await overLimit(env, "feedback-guest:all", 50, 86400)) {
+        return json({ error: "Feedback is closed for today, try tomorrow" }, 429, cors());
+      }
+
+      let id = null;
+      try {
+        const ins = await fetch(`${SUPABASE_URL}/rest/v1/feedback`, {
+          method: "POST",
+          headers: {
+            apikey: env.SUPABASE_KEY,
+            Authorization: `Bearer ${env.SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          },
+          body: JSON.stringify({
+            user_id: null,
+            user_email: emailRaw || null,
+            user_name: "Guest",
+            type,
+            message,
+            app_version: String(body.app_version ?? "").slice(0, 20),
+            user_agent: String(request.headers.get("User-Agent") || "").slice(0, 300),
+            app: "music-night",
+          }),
+        });
+        if (ins.ok) id = (await ins.json().catch(() => null))?.[0]?.id || null;
+      } catch { /* id stays null */ }
+      if (!id) return json({ error: "Could not save" }, 502, cors());
+
+      const typeEmoji = { bug: "🔧", idea: "💡", other: "💬" }[type] || "💬";
+      const text =
+        `${typeEmoji} *Tunemail Feedback \\(guest\\)*\n\n` +
+        `✉️ ${emailRaw ? escapeMarkdown(emailRaw) : "no email, cannot be answered"}\n` +
+        `📝 ${escapeMarkdown(message)}`;
+      try {
+        const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text, parse_mode: "MarkdownV2" }),
+        });
+        if (!tg.ok) return json({ error: "Notification failed" }, 502, cors());
+        const messageId = (await tg.json().catch(() => null))?.result?.message_id;
+        if (messageId) {
+          await fetch(`${SUPABASE_URL}/rest/v1/feedback?id=eq.${id}`, {
+            method: "PATCH",
+            headers: {
+              apikey: env.SUPABASE_KEY,
+              Authorization: `Bearer ${env.SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ telegram_message_id: messageId }),
+          }).catch(() => {});
+        }
+      } catch {
+        return json({ error: "Notification failed" }, 502, cors());
+      }
+      return json({ ok: true }, 200, cors());
+    }
+
     if (request.method === "POST" && url.pathname === "/feedback-notify") {
       const user = await verifyUser(request, env);
       if (!user) return json({ error: "Unauthorized" }, 401, cors());
@@ -1608,15 +1691,8 @@ async function route(request, env, ctx) {
         return json({ error: "Bad request" }, 400, cors());
       }
 
-      const { feedback_id, type, app, screenshot_url } = body;
+      const { feedback_id, app } = body;
       if (app !== "music-night") return json({ error: "Bad request" }, 400, cors());
-
-      // Telegram rejects a message over 4096 characters outright, so an
-      // uncapped body did not produce a huge notification - it produced no
-      // notification at all, and the client swallowed the failure. Cut here so
-      // the report still arrives, shortened.
-      const message = String(body.message ?? "").slice(0, 3000);
-      const user_name = String(body.user_name ?? "").slice(0, 80);
 
       // One account could otherwise drive the owner's phone as a siren.
       if (await overLimit(env, `feedback:${user.id}`, 10, 3600)) {
@@ -1625,6 +1701,33 @@ async function route(request, env, ctx) {
       if (!/^[a-f0-9-]{36}$/.test(String(feedback_id || ""))) {
         return json({ error: "Bad request" }, 400, cors());
       }
+
+      // The report is read from the caller's OWN row, not from the request.
+      // Found 13 Oct, after Cinemail reported the same shape on its side: the
+      // id came from the body and was never checked against the caller, so a
+      // notification could be tied to somebody else's row and the owner's
+      // reply would land in a stranger's feedback. The text came from the body
+      // too, so what Telegram showed need not be what was stored. Both now come
+      // from the database, filtered by the id the token proves.
+      let row = null;
+      try {
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/feedback?id=eq.${feedback_id}&user_id=eq.${user.id}` +
+          `&select=type,message,user_name,screenshot_url&limit=1`,
+          { headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${env.SUPABASE_KEY}` } }
+        );
+        if (r.ok) row = (await r.json().catch(() => null))?.[0] || null;
+      } catch { /* treated as not found below */ }
+      if (!row) return json({ error: "Not found" }, 404, cors());
+
+      const type = row.type;
+      const screenshot_url = row.screenshot_url;
+      // Telegram rejects a message over 4096 characters outright, so an
+      // uncapped body did not produce a huge notification - it produced no
+      // notification at all, and the client swallowed the failure. Cut here so
+      // the report still arrives, shortened.
+      const message = String(row.message ?? "").slice(0, 3000);
+      const user_name = String(row.user_name ?? "").slice(0, 80);
 
       const typeEmoji = { bug: "🔧", idea: "💡", other: "💬" }[type] || "💬";
       // The id goes FIRST: the regex on the way back takes the first match, and
@@ -1802,9 +1905,16 @@ async function route(request, env, ctx) {
         updated = [];
       }
 
+      // A guest has no account to read the reply in. It is still stored, but
+      // saying "Reply sent" would be false - so the owner is told where it has
+      // to go instead.
+      const target = updated[0];
       await notifyOwner(
         env,
-        updated.length ? "Reply sent to user" : "That feedback no longer exists, nothing was sent."
+        !target ? "That feedback no longer exists, nothing was sent."
+          : target.user_id ? "Reply sent to user"
+          : target.user_email ? `That was a guest. The app cannot show them the reply - write to ${target.user_email}`
+          : "That was a guest with no email. The reply is saved, but nothing can reach them."
       );
       return new Response("OK", { status: 200 });
     }

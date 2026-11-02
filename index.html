@@ -7,7 +7,16 @@
        on them. So the home indicator and the notch were being allowed for in CSS
        that could never fire, in exactly the builds the insets exist for. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <title>Tunemail</title>
+  <!-- Built on the phrase people actually type (Google suggestions, 13 Oct):
+       "convert spotify link to apple music". Converting needs no account, so
+       the description may say so; sending a Tunemail link does need one, so it
+       does not claim more. -->
+  <title>Tunemail - Spotify link to Apple Music, and every other app</title>
+  <meta name="description" content="Paste a song link from Spotify, Apple Music, YouTube, Deezer, Tidal or SoundCloud and get the same recording on every other service. Free, no sign-up to convert." />
+  <link rel="canonical" href="https://tunemail.app/" />
+  <meta property="og:title" content="Tunemail - send a song that opens in their app" />
+  <meta property="og:description" content="One link that opens the exact recording in whatever app your friend uses." />
+  <meta property="og:image" content="https://tunemail.app/icons/icon-512.png" />
   <!-- The manifest does not cover iOS; this is what a home-screen shortcut uses. -->
   <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
   <link rel="icon" href="icons/favicon-16.png" sizes="16x16">
@@ -563,6 +572,22 @@ button {
       font-weight: 600;
     }
     .avatar-btn:hover { background: rgba(124,58,237,0.2); }
+    /* A guest's way in: words, not a lone arrow nobody reads as "sign in". */
+    .avatar-btn.is-guest {
+      width: auto; height: auto; min-height: 44px; padding: 0 16px;
+      border-radius: 999px; font-size: 13px;
+    }
+    .ask-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+    .ask-why { color: var(--muted-strong); font-size: 14px; line-height: 1.5; }
+    .tab-footer {
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 4px;
+      margin: 28px 0 8px; font-size: 12px; color: var(--muted);
+    }
+    .tab-footer a {
+      display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px;
+      color: var(--muted-strong); text-decoration: none;
+    }
+    .tab-footer a:hover { color: var(--text); }
 
     /* ── Tab Bar ────────────────────────────────────────────────────── */
     .tabbar {
@@ -1592,6 +1617,15 @@ button {
       box-sizing: border-box;
     }
     .feedback-textarea:focus { border-color: rgba(124,58,237,0.4); }
+    /* The guest's email field, the same object as the message box above it. */
+    .feedback-input {
+      width: 100%; min-height: 44px; box-sizing: border-box;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; color: var(--text); font-family: var(--font-text);
+      font-size: 13px; padding: 0 12px; outline: none;
+    }
+    .feedback-input:focus { border-color: rgba(124,58,237,0.4); }
+    .feedback-input::placeholder { color: #555; }
     .feedback-textarea::placeholder { color: #555; }
     .fb-btn-cancel { min-height: 44px;
       flex: 1;
@@ -1851,7 +1885,7 @@ button {
       <div class="auth-footer">
         No account? <a id="link-to-signup">Create one</a>
         <span aria-hidden="true"> &middot; </span>
-        <a id="link-browse-guest">Just browse</a>
+        <a id="link-browse-guest">Back to Tunemail</a>
       </div>
     </div>
   </div>
@@ -1882,6 +1916,8 @@ button {
       </div>
       <div class="auth-footer">
         Already have an account? <a id="link-to-signin">Sign in</a>
+        <span aria-hidden="true"> &middot; </span>
+        <a id="link-signup-back">Back to Tunemail</a>
       </div>
     </div>
   </div>
@@ -2027,7 +2063,10 @@ button {
               <span class="coffee-icon"><svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><path d="M6 2v3M10 2v3M14 2v3"/></svg></span> Wanna say thanks?
             </a>
           </div>
-          <div class="public-footer-hint">developed by dafaspace · tunemail</div>
+          <!-- A link, not a caption: every shared page is seen by people who never
+               installed anything, and this is the one line that can carry them to
+               the rest of the work. The ref says where they came from. -->
+          <div class="public-footer-hint">developed by <a href="https://dafaspace.com/?ref=tunemail" target="_blank" rel="noopener" style="color:inherit">dafaspace</a> · tunemail</div>
         </div>
         <div class="public-footer-join">
           <p>Make your own playlist, share anywhere</p>
@@ -2178,6 +2217,14 @@ button {
       </div>
 
       <div id="search-empty"></div>
+      <!-- Quiet on purpose: a line at the bottom, never a popup. -->
+      <div class="tab-footer">
+        <a href="https://ko-fi.com/dafaspace" target="_blank" rel="noopener">Say thanks</a>
+        <span aria-hidden="true">&middot;</span>
+        <a href="https://cinemail.app/?ref=tunemail" target="_blank" rel="noopener">Cinemail, the same for films</a>
+        <span aria-hidden="true">&middot;</span>
+        <a href="privacy.html">Privacy</a>
+      </div>
       </div>
     </div>
 
@@ -2568,6 +2615,27 @@ button {
 </div><!-- /app -->
 
 <!-- Feedback Modal — outside app so it works on all screens -->
+<!-- Asked at the moment an account is worth something, never at the door.
+     "Not now" is the way back: the sheet closes and the person is exactly
+     where they were, with whatever they had pasted still there. -->
+<div class="overlay" id="overlay-ask-account">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">A free account</span>
+      <button class="modal-close" aria-label="Close" data-close="overlay-ask-account"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="ask-why" id="ask-account-why"></div>
+      <div class="ask-actions">
+        <button class="btn-modal-primary" id="btn-ask-signup"><span class="bm-label">Create a free account</span></button>
+        <button class="btn-modal-secondary" id="btn-ask-signin"><span class="bm-label">I have an account</span></button>
+        <button class="heard-undo" id="btn-ask-later" style="align-self:center">Not now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="overlay-feedback" class="overlay" onclick="closeFeedback()">
   <div style="padding:20px;width:100%;display:flex;justify-content:center;cursor:default" onclick="event.stopPropagation()">
     <div class="feedback-modal">
@@ -2581,11 +2649,17 @@ button {
       </div>
       <div class="feedback-modal-label">Message</div>
       <textarea id="fb-message" class="feedback-textarea" placeholder="Tell me what's on your mind…"></textarea>
+      <!-- Guests only. Without an account there is nowhere in the app to show a
+           reply, so an email is the only way an answer can reach them. -->
+      <div id="fb-guest-email-wrap" hidden style="margin-bottom:14px">
+        <div class="feedback-modal-label">Email for a reply <span style="text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></div>
+        <input type="email" id="fb-guest-email" class="feedback-input" placeholder="you@example.com" autocomplete="email" />
+      </div>
 
       <!-- A screenshot turns "something is broken" into a report that can be
            acted on. Ported from Cinemail, where it earns its place. -->
       <input type="file" id="fb-screenshot" accept="image/*" hidden>
-      <div class="fb-attach">
+      <div class="fb-attach" id="fb-attach-row">
         <button type="button" class="fb-attach-btn" id="fb-attach-btn">
           <svg class="g" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2673,29 +2747,63 @@ function showScreen(name) {
 
 let isGuest = false;
 
-function enterGuestMode() {
+// The tab a guest was on when they went to sign in, so "Back to Tunemail"
+// returns them there rather than to a home they did not choose. Found by the
+// audit of 13 Oct: Share sent a guest to sign-up, and the only way out landed
+// in Discover, away from the song they had just pasted.
+let guestReturnTab = 'search';
+
+function currentTabName() {
+  return document.querySelector('.tab-btn.active')?.dataset.tab || 'search';
+}
+
+// The door is open from 13 Oct: a visitor lands on the paste field, not on a
+// sign-in form. An account is offered when it is worth something (see
+// requireAccount), never demanded before anything has been shown.
+function enterGuestMode(tab) {
   endBoot();
   isGuest = true;
   currentUser = null;
   document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
   document.getElementById('main-app').classList.add('active');
-  // Discover is the guest's home: it is the tab that works in full.
-  showTab('shared');
-  // The account button becomes the way back to sign-in.
-  const av = document.querySelector('.avatar-btn');
-  if (av) av.textContent = '→';
+  showTab(typeof tab === 'string' ? tab : guestReturnTab);
+  const av = document.getElementById('btn-avatar');
+  if (av) {
+    av.textContent = 'Sign in';
+    av.classList.add('is-guest');
+    av.setAttribute('aria-label', 'Sign in or create an account');
+  }
 }
 
-// One gate for every action that needs somebody to exist. The prompt lands at
-// the moment of intent, which is the only moment it converts.
+// What an account does for the person, said for the thing they just tried.
+const ACCOUNT_WHY = {
+  'share a track': 'An account turns this song into one link that opens for anyone, in their own app.',
+  'keep the songs you hear': 'An account keeps every song you identify in a list called Heard, ready to send.',
+};
+
+// One gate for every action that needs somebody to exist. It asks at the
+// moment of intent, in a sheet over the app - closing it leaves the person
+// exactly where they were.
 function requireAccount(what) {
   if (currentUser) return true;
-  showToast(`Create an account to ${what || 'do that'}`);
-  isGuest = false;
-  document.getElementById('main-app').classList.remove('active');
-  showScreen('signup');
+  guestReturnTab = currentTabName();
+  document.getElementById('ask-account-why').textContent =
+    (ACCOUNT_WHY[what] || `An account is needed to ${what || 'do that'}.`) +
+    ' It is free, and it keeps your songs and playlists.';
+  openModal('overlay-ask-account');
   return false;
 }
+
+function leaveForAuth(screen) {
+  guestReturnTab = currentTabName();
+  closeModal('overlay-ask-account');
+  isGuest = false;
+  document.getElementById('main-app').classList.remove('active');
+  showScreen(screen);
+}
+document.getElementById('btn-ask-signup').addEventListener('click', () => leaveForAuth('signup'));
+document.getElementById('btn-ask-signin').addEventListener('click', () => leaveForAuth('signin'));
+document.getElementById('btn-ask-later').addEventListener('click', () => closeModal('overlay-ask-account'));
 
 function showTab(name) {
   if (name === 'playlists' && !currentUser) {
@@ -3027,17 +3135,18 @@ async function loadDiscover() {
 // ── Account modal ─────────────────────────────────────────────────────
 
 const _guestLink = document.getElementById('link-browse-guest');
-if (_guestLink) _guestLink.addEventListener('click', enterGuestMode);
+if (_guestLink) _guestLink.addEventListener('click', () => enterGuestMode());
+document.getElementById('link-signup-back')?.addEventListener('click', () => enterGuestMode());
 
 document.getElementById('btn-avatar').addEventListener('click', () => {
-  if (!currentUser) { isGuest = false; document.getElementById('main-app').classList.remove('active'); showScreen('signin'); return; }
+  if (!currentUser) { leaveForAuth('signin'); return; }
   openModal('overlay-account');
 });
 
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v92';
+const APP_BUILD = 'v93';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3062,16 +3171,21 @@ document.addEventListener('DOMContentLoaded', () => {
 const MUSIC_NIGHT_WORKER = 'https://music-night-worker.dafa4me.workers.dev';
 let _fbType = 'other';
 
-document.getElementById('btn-open-feedback').addEventListener('click', () => {
-  if (!requireAccount('send feedback')) return;
-  openFeedback();
-});
+// Open to guests from 13 Oct. With the site open to everyone, most visitors
+// are guests, and feedback behind an account meant most of them could not say
+// anything. A guest sends text (screenshots live in per-user storage) and may
+// leave an email, which is the only way a reply can reach them.
+document.getElementById('btn-open-feedback').addEventListener('click', openFeedback);
 
 function openFeedback() {
   _fbType = 'other';
   document.getElementById('fb-message').value = '';
   setFbType('other');
-  loadFeedbackReplies();
+  const guest = !currentUser;
+  document.getElementById('fb-guest-email-wrap').hidden = !guest;
+  document.getElementById('fb-attach-row').style.display = guest ? 'none' : '';
+  if (guest) document.getElementById('fb-replies').style.display = 'none';
+  else loadFeedbackReplies();
   openModal('overlay-feedback');
 }
 
@@ -3247,6 +3361,28 @@ async function submitFeedback() {
   if (!message) { showToast('Please write something first'); return; }
   const btn = document.getElementById('fb-submit-btn');
   btn.textContent = 'SENDING…'; btn.disabled = true;
+  if (!currentUser) {
+    try {
+      const res = await fetch(MUSIC_NIGHT_WORKER + '/feedback-guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: _fbType, message, app: 'music-night', app_version: APP_BUILD,
+          email: document.getElementById('fb-guest-email').value.trim(),
+        }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.ok) throw new Error(d?.error || `status ${res.status}`);
+      document.getElementById('fb-message').value = '';
+      document.getElementById('fb-guest-email').value = '';
+      showToast('Thank you, it reached me');
+      closeFeedback();
+    } catch (e) {
+      showToast('Could not send: ' + e.message, 4000);
+    }
+    btn.textContent = 'SEND'; btn.disabled = false;
+    return;
+  }
   try {
     const displayName = currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0] || '';
     let shotUrl = null;
@@ -5391,7 +5527,7 @@ function heardSaved(state, detail = '') {
     saved:   `${HEARD_TICK}Saved to ${HEARD_PLAYLIST}`,
     already: `${HEARD_TICK}Already in ${HEARD_PLAYLIST}`,
     removed: `Removed from ${HEARD_PLAYLIST}`,
-    guest:   'Sign in to keep it',
+    guest:   '<button class="heard-undo" data-heard-keep style="margin-left:-10px">Keep it in your list</button>',
     failed:  `Not saved: ${escHtml(detail)}`,
   }[state] || '';
   el.innerHTML = say + (state === 'saved' ? '<button class="heard-undo" data-heard-undo>Undo</button>' : '');
@@ -5400,6 +5536,10 @@ function heardSaved(state, detail = '') {
 document.getElementById('heard-card')?.addEventListener('click', async (e) => {
   const h = heard;
   if (!h) return;
+  if (e.target.closest('[data-heard-keep]')) {
+    requireAccount('keep the songs you hear');
+    return;
+  }
   if (e.target.closest('[data-heard-more]')) {
     h.expanded = !h.expanded;
     heardPaintLinks();
@@ -6013,7 +6153,10 @@ function populateAccount(user) {
   const initials = name.slice(0, 2).toUpperCase();
   document.getElementById('account-name').textContent = name;
   document.getElementById('account-email').textContent = user.email || '';
-  document.getElementById('btn-avatar').textContent = initials.slice(0, 1);
+  const av = document.getElementById('btn-avatar');
+  av.textContent = initials.slice(0, 1);
+  av.classList.remove('is-guest');
+  av.setAttribute('aria-label', 'Account');
   document.getElementById('account-avatar').textContent = initials.slice(0, 1);
   // Cleared BEFORE the lookup, not conditionally after it. The old code only
   // wrote when the new account had a username, so an account without one
@@ -7845,7 +7988,7 @@ function attachAuthListener() {
     else await onSignedIn(session.user);
   } else {
     clearRecovery();
-    showScreen('signin');
+    enterGuestMode('search');
   }
 
   attachAuthListener();
