@@ -1052,7 +1052,14 @@ async function sharePage(slug, url) {
   const summary = list.length
     ? list.map((t) => `${t.artist} - ${t.track_name}`).join(" · ")
     : "Open it in whatever you already listen with.";
-  const desc = summary.length > 200 ? summary.slice(0, 200).replace(/\s+\S*$/, "") + "…" : summary;
+  // The sender's note is what the messenger card says, when there is one.
+  // Found 23 Oct: the note was fetched (description, above) and then dropped,
+  // so the card showed only the track list - and "with your note on why it is
+  // worth hearing" is half of what Tunemail promises. Dafa's channel posts a
+  // weekly track as one of these links, so the note is the post.
+  const note = String(pl.description || "").replace(/\s+/g, " ").trim();
+  const clip = (s) => s.length > 200 ? s.slice(0, 200).replace(/\s+\S*$/, "") + "…" : s;
+  const desc = clip(note || summary);
 
   const html = `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1085,6 +1092,8 @@ img{width:104px;height:104px;border-radius:10px;flex-shrink:0;object-fit:cover;b
 h1{font-size:24px;line-height:1.2;letter-spacing:-.01em;margin:0 0 6px;text-wrap:balance}
 .meta{color:#9a9aa6;font-size:14px;margin:0}
 ul{margin:18px 0 0;padding:0;list-style:none;color:#b6b6c2;font-size:14px}
+.note{margin:18px 0 0;font-size:15.5px;line-height:1.55;color:#f0f0f0;white-space:pre-line;
+      border-left:2px solid #7c3aed;padding-left:12px}
 li{padding:3px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cta{display:block;margin-top:22px;background:#7c3aed;color:#fff;text-align:center;
      text-decoration:none;font-weight:600;padding:15px;border-radius:12px;font-size:16.5px}
@@ -1112,6 +1121,7 @@ ${fromName ? `<p class="from"><b>${esc(fromName)}</b> sent you this</p>` : ""}
     })()}</p>
   </div>
 </div>
+${note ? `<p class="note">${esc(String(pl.description).trim().slice(0, 2000))}</p>` : ""}
 ${list.length ? `<ul>${list.map((t) => `<li>${esc(t.artist)} - ${esc(t.track_name)}</li>`).join("")}</ul>` : ""}
 <a class="cta" href="${esc(appUrl)}">Listen &rarr;</a>
 <p class="sub">Opens in whatever you already use. No app, no account.</p>
