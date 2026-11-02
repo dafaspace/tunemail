@@ -7,6 +7,16 @@ The product brief and the long history are in `MSN.md`; what blocks a release is
 **One sentence:** send a song to anyone: one link opens it in whatever app they use, with your
 note on why it is worth hearing.
 
+## Scope: whose page is it
+
+Decided by Dafa on 3 Nov 2026 (also in `_HQ/STATE.md`):
+- **Tunemail owns pages of released recordings with an ISRC**, including a contributor's page of
+  work (producer, composer, engineer) with the role on each track.
+- Own, unreleased or uploaded work, with listening statistics, belongs to **Underpicture**.
+  Tunemail does not host audio.
+- **danielfainberg.com** shows both; it is not a third engine.
+- MSA (YouTube channel) material never appears anywhere: it is under NDA.
+
 ## Rules learned here
 
 - **Stage files by name, never `git add -A`.** An Apple `.p8` once reached the public repo that way
