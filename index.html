@@ -1864,6 +1864,13 @@ button {
        headings, and [style*] catches headings styled inline (both from Cinemail). */
     :is(html:lang(ka), html:lang(he), html:lang(ja)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-weight: 700; font-synthesis: none; }
     html:lang(ka) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-stretch: 62.5%; }
+    /* Cyrillic in display type is uppercase, like the Latin beside it: Bebas Neue
+       has no lowercase, its Cyrillic partner does, so a Russian label otherwise
+       came out mixed case next to all-caps English. Russian and Ukrainian only;
+       Georgian must not turn into Mtavruli. Dafa, 3 Nov 2026 (variant B, same in
+       Cinemail); the matching size-adjust is in fonts/partners/partners.css. */
+    :is(html:lang(ru), html:lang(uk)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { text-transform: uppercase; }
+
 </style>
 </head>
 <body>
@@ -3172,7 +3179,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v94';
+const APP_BUILD = 'v95';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
