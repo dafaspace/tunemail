@@ -22,6 +22,21 @@
   <link rel="icon" href="icons/favicon-16.png" sizes="16x16">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="manifest" href="manifest.json" />
+  <!-- Partner faces for the scripts DM Sans and Bebas Neue do not cover (Cyrillic,
+       Georgian, Hebrew), shared byte for byte with Cinemail. A face downloads only
+       when a letter of its script is on the page. Japanese is a separate sheet of
+       240 slices, 206 KB of rules, so it is added only for a Japanese interface:
+       loadJapaneseFaces() below, called again when the language can be switched. -->
+  <link rel="stylesheet" href="fonts/partners/partners.css" />
+  <script>
+    function loadJapaneseFaces() {
+      if (document.getElementById('faces-ja')) return;
+      const l = document.createElement('link');
+      l.id = 'faces-ja'; l.rel = 'stylesheet'; l.href = 'fonts/partners/partners-jp.css';
+      document.head.appendChild(l);
+    }
+    if (/^ja\b/i.test(document.documentElement.lang)) loadJapaneseFaces();
+  </script>
   <meta name="theme-color" content="#0d0d1a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -56,7 +71,7 @@
     #boot .lockup { display: flex; align-items: center; gap: 12px; }
     #boot img { display: block; width: 46px; height: 46px; }
     #boot span {
-      font-family: 'Bebas Neue', Impact, sans-serif;
+      font-family: var(--font-display);
       font-size: 40px; letter-spacing: 3px; color: #f0f0f0;
       /* Tracking adds a gap after the last letter; give it back, or the
          wordmark sits right of centre by half of it. */
@@ -139,8 +154,10 @@
          was pointing at. Bebas keeps the display sizes; DM Sans takes anything
          that has to be read rather than seen. Tracking is in em, since a fixed
          pixel value is wrong at some size by definition (apple-design 15). */
-      --font-display: 'Bebas Neue', 'Oswald', -apple-system, 'Arial Narrow', sans-serif;
-      --font-text:    'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      /* Partners follow the family fonts script by script (fonts/partners/partners.css):
+         Cyrillic, Georgian, Hebrew, Japanese. Same stacks as Cinemail. */
+      --font-display: 'Bebas Neue', 'Sofia Sans Extra Condensed', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Noto Sans JP', system-ui;
+      --font-text:    'DM Sans', 'Geist', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Noto Sans JP', system-ui;
       --radius:         12px;
       --radius-lg:      20px;
     }
@@ -1680,7 +1697,7 @@ button {
          Bebas caps the in-app buttons use. Caps plus tracking next to a thin
          arrow reads badly, and the arrow is what tells you this moves you
          somewhere, so the type gives way, not the arrow. */
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--font-text);
       font-size: 16.5px; font-weight: 600; line-height: 1.2; letter-spacing: 0;
       transition: transform 100ms ease-out, background 150ms;
     }
@@ -1838,7 +1855,16 @@ button {
     .text-muted { color: var(--muted); }
     .text-accent { color: var(--accent); }
     .text-primary { color: #a78bfa; }
-  </style>
+  
+    /* Headings in Georgian, Hebrew and Japanese: the partner faces at 700, and
+       Georgian condensed to sit beside Bebas Neue (_Tastebook, 3 Nov 2026). Keyed
+       on the interface language, because on a Latin heading 700 would make the
+       browser fake a bold Bebas, which has only one weight. font-synthesis: none
+       stops that fake bold on the Latin letters and digits inside these same
+       headings, and [style*] catches headings styled inline (both from Cinemail). */
+    :is(html:lang(ka), html:lang(he), html:lang(ja)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-weight: 700; font-synthesis: none; }
+    html:lang(ka) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-stretch: 62.5%; }
+</style>
 </head>
 <body>
 
@@ -2121,7 +2147,7 @@ button {
              "or let me hear" above nothing. -->
         <div id="recognise-block">
           <div id="recognise-listen">
-          <div style="font-size:11px;color:var(--muted);font-family:DM Sans;margin-bottom:10px;letter-spacing:0.3px">or let me hear</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--font-text);margin-bottom:10px;letter-spacing:0.3px">or let me hear</div>
           <button id="btn-recognise" aria-label="Identify the song playing nearby" title="Identify song playing nearby" style="
             width:68px;height:68px;border-radius:50%;border:none;cursor:pointer;
             background:rgba(124,58,237,0.12);
@@ -2137,7 +2163,7 @@ button {
             </svg>
             <span style="font-family:var(--font-text);font-size:10px;font-weight:700;letter-spacing:.08em;line-height:1">TAP</span>
           </button>
-          <div id="recognise-status" style="font-size:11px;color:#a78bfa;font-family:DM Sans;margin-top:10px;min-height:16px"></div>
+          <div id="recognise-status" style="font-size:11px;color:#a78bfa;font-family:var(--font-text);margin-top:10px;min-height:16px"></div>
           </div>
           <!-- What was heard, in place of the button that heard it. Filled by
                heardShow(); see the CSS note on .heard-card for where it comes from. -->
@@ -2168,7 +2194,7 @@ button {
       <div id="manual-entry">
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0">
         <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
-        <span style="font-size:11px;color:var(--muted);font-family:DM Sans">or enter manually</span>
+        <span style="font-size:11px;color:var(--muted);font-family:var(--font-text)">or enter manually</span>
         <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
       </div>
       <div class="form-group">
@@ -2296,7 +2322,7 @@ button {
           <input type="text" id="playlist-name-input" placeholder="My Awesome Playlist" />
         </div>
         <div class="form-group">
-          <label>Description <span class="text-muted" style="font-family:DM Sans;font-size:11px;letter-spacing:0">(optional)</span></label>
+          <label>Description <span class="text-muted" style="font-family:var(--font-text);font-size:11px;letter-spacing:0">(optional)</span></label>
           <textarea id="playlist-desc-input" placeholder="What's this playlist about?"></textarea>
         </div>
         <div class="toggle-row">
@@ -2310,7 +2336,7 @@ button {
           </label>
         </div>
         <div class="divider"></div>
-        <div style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px">Streaming Links <span style="font-family:DM Sans;font-size:11px;letter-spacing:0;text-transform:none">(optional, adds an embedded player)</span></div>
+        <div style="font-family:var(--font-text);font-weight:600;font-size:12.5px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px">Streaming Links <span style="font-family:var(--font-text);font-size:11px;letter-spacing:0;text-transform:none">(optional, adds an embedded player)</span></div>
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:6px"><span style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:4px"><svg width="13" height="13" viewBox="0 0 168 168"><circle cx="84" cy="84" r="84" fill="#1DB954"/><path d="M120.7 116.4c-1.6 2.7-5.1 3.5-7.7 1.9-21.2-13-47.9-15.9-79.3-8.7-3 .7-6.1-1.2-6.8-4.2-.7-3 1.2-6.1 4.2-6.8 34.4-7.9 64-4.5 87.8 10.1 2.7 1.6 3.5 5.1 1.9 7.7zm10.2-22.8c-2 3.4-6.4 4.5-9.8 2.5-24.3-14.9-61.3-19.3-90-10.5-3.7 1.1-7.6-1-8.7-4.7-1.1-3.7 1-7.6 4.7-8.7 32.8-10 73.5-5.1 101.3 12 3.4 2 4.5 6.4 2.5 9.8zm.9-23.8c-29.1-17.3-77.2-18.9-105-10.5-4.5 1.4-9.2-1.2-10.5-5.6-1.4-4.5 1.2-9.2 5.6-10.5 31.9-9.7 84.9-7.8 118.4 12.1 4 2.4 5.4 7.6 3 11.6-2.4 4.1-7.6 5.4-11.6 3z" fill="white"/></svg></span> Spotify URL</label>
           <input type="url" id="playlist-spotify-url" placeholder="https://open.spotify.com/playlist/..." />
@@ -2509,8 +2535,8 @@ button {
       </div>
       <div class="modal-body">
         <div style="text-align:center;padding:8px 0 20px">
-          <div style="width:56px;height:56px;border-radius:50%;background:var(--primary-soft);border:2px solid var(--primary-border);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue','Arial Narrow',sans-serif;font-size:24px;color:#a78bfa;margin:0 auto 12px" id="account-avatar">U</div>
-          <div style="font-family:'Bebas Neue','Arial Narrow',sans-serif;font-size:18px;letter-spacing:0.5px" id="account-name">User</div>
+          <div style="width:56px;height:56px;border-radius:50%;background:var(--primary-soft);border:2px solid var(--primary-border);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:24px;color:#a78bfa;margin:0 auto 12px" id="account-avatar">U</div>
+          <div style="font-family:var(--font-display);font-size:18px;letter-spacing:0.5px" id="account-name">User</div>
           <div style="font-size:12px;color:var(--muted)" id="account-email"></div>
           <div id="account-profile-link" style="display:none;margin-top:6px">
             <a id="account-profile-url" href="#" target="_blank" style="font-size:12px;color:#a78bfa;text-decoration:none"><svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg> music-night/?u=...</a>
@@ -2518,7 +2544,7 @@ button {
         </div>
         <div class="divider"></div>
         <div class="form-group">
-          <label>Username <span style="font-family:DM Sans;font-size:11px;letter-spacing:0;text-transform:none;color:var(--muted)">(your public profile URL)</span></label>
+          <label>Username <span style="font-family:var(--font-text);font-size:11px;letter-spacing:0;text-transform:none;color:var(--muted)">(your public profile URL)</span></label>
           <div style="display:flex;gap:8px">
             <input type="text" id="account-username" placeholder="e.g. dafaspace" style="flex:1" autocomplete="off" />
             <button class="btn btn-secondary btn-sm" id="btn-save-username">Save</button>
@@ -2640,7 +2666,7 @@ button {
   <div style="padding:20px;width:100%;display:flex;justify-content:center;cursor:default" onclick="event.stopPropagation()">
     <div class="feedback-modal">
       <div style="font-family:var(--font-text);color:var(--primary-text);font-size:11.5px;font-weight:700;letter-spacing:.1em;margin-bottom:3px">FEEDBACK</div>
-      <div style="font-family:'Bebas Neue','Arial Narrow',sans-serif;font-size:19px;margin-bottom:14px;line-height:1.2">Share a thought or report a bug</div>
+      <div style="font-family:var(--font-display);font-size:19px;margin-bottom:14px;line-height:1.2">Share a thought or report a bug</div>
       <div class="feedback-modal-label">Type</div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
         <button id="fb-type-bug"   onclick="setFbType('bug')"   class="fb-type-btn"><svg class="g" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2.1 2.1 0 0 1-3-3z"/></svg> Bug</button>
@@ -3146,7 +3172,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v93';
+const APP_BUILD = 'v94';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -7145,7 +7171,7 @@ async function loadPublicPlaylist(slug) {
     // Both are attacker-chosen: display_name has no validation at all, and the
     // username rule is client-side only. This is the page anonymous visitors open.
     const byPart = authorName
-      ? ` · shared by ${escHtml(authorName)}${authorUsername ? ` <a href="?u=${encodeURIComponent(authorUsername)}" style="color:#a78bfa;text-decoration:none;font-family:DM Sans,sans-serif;display:inline-block;padding:14px 4px">@${escHtml(authorUsername)}</a>` : ''}`
+      ? ` · shared by ${escHtml(authorName)}${authorUsername ? ` <a href="?u=${encodeURIComponent(authorUsername)}" style="color:#a78bfa;text-decoration:none;font-family:var(--font-text);display:inline-block;padding:14px 4px">@${escHtml(authorUsername)}</a>` : ''}`
       : '';
     // Counting rows and calling the result "tracks" is a lie when the playlist is
     // an embed: the player above is holding songs this count cannot see. Say

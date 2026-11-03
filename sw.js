@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION on every deploy that changes the precached files below,
  * otherwise returning visitors keep the old shell until the cache is evicted.
  */
-const CACHE_VERSION = 'v93';
+const CACHE_VERSION = 'v94';
 const CACHE_NAME = `tunemail-${CACHE_VERSION}`;
 
 /* Same-origin shell. Without any one of these the page cannot render, so a
@@ -29,6 +29,10 @@ const SHELL = [
   './fonts/bebas-neue-latin-ext.woff2',
   './fonts/dm-sans-latin.woff2',
   './fonts/dm-sans-latin-ext.woff2',
+  // The partner faces' rules, so offline text in Cyrillic, Georgian or Hebrew
+  // still finds its font. The font files themselves are cached the first time
+  // a page needs them (cacheFirst below), not here: most people need none.
+  './fonts/partners/partners.css',
 ];
 
 /* Cross-origin code the page needs to boot. NOT the same criticality as the
