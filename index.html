@@ -1867,8 +1867,8 @@ button {
     /* Cyrillic in display type is uppercase, like the Latin beside it: Bebas Neue
        has no lowercase, its Cyrillic partner does, so a Russian label otherwise
        came out mixed case next to all-caps English. Russian and Ukrainian only;
-       Georgian must not turn into Mtavruli. Dafa, 3 Nov 2026 (variant B, same in
-       Cinemail); the matching size-adjust is in fonts/partners/partners.css. */
+       Georgian must not turn into Mtavruli. Dafa, 3 Nov 2026 (option C in _Tastebook/
+       tokens.json, same in Cinemail); the matching size-adjust is in fonts/partners/partners.css. */
     :is(html:lang(ru), html:lang(uk)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { text-transform: uppercase; }
 
 </style>

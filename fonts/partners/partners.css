@@ -14,7 +14,8 @@
  * size-adjust 106.9% on Sofia Sans Extra Condensed only: its caps are 65.5 at
  * 100px against Bebas Neue's 70.0, so Cyrillic labels sat 1.5px low in the
  * same button (Cinemail measured). 70.0/65.5 brings them level. Dafa, 3 Nov 2026,
- * together with uppercase Cyrillic in display type (variant B).
+ * option C in _Tastebook/tokens.json: size-adjust here, plus uppercase
+ * display type under :lang(ru) and :lang(uk) in each app's own CSS.
  */
 
 @font-face {
