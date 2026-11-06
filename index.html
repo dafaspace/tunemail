@@ -156,8 +156,8 @@
          pixel value is wrong at some size by definition (apple-design 15). */
       /* Partners follow the family fonts script by script (fonts/partners/partners.css):
          Cyrillic, Georgian, Hebrew, Japanese. Same stacks as Cinemail. */
-      --font-display: 'Bebas Neue', 'Sofia Sans Extra Condensed', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Noto Sans JP', system-ui;
-      --font-text:    'DM Sans', 'Geist', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Noto Sans JP', system-ui;
+      --font-display: 'Bebas Neue', 'Sofia Sans Extra Condensed', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Beiruti', 'Noto Sans JP', system-ui;
+      --font-text:    'DM Sans', 'Geist', 'Noto Sans Georgian', 'IBM Plex Sans Hebrew', 'Noto Sans Arabic', 'Noto Sans JP', system-ui;
       --radius:         12px;
       --radius-lg:      20px;
     }
@@ -1856,13 +1856,13 @@ button {
     .text-accent { color: var(--accent); }
     .text-primary { color: #a78bfa; }
   
-    /* Headings in Georgian, Hebrew and Japanese: the partner faces at 700, and
-       Georgian condensed to sit beside Bebas Neue (_Tastebook, 3 Nov 2026). Keyed
+    /* Headings in Georgian, Hebrew, Arabic and Japanese: the partner faces at 700, and
+       Georgian condensed to sit beside Bebas Neue (_Tastebook, 3 and 6 Nov 2026). Keyed
        on the interface language, because on a Latin heading 700 would make the
        browser fake a bold Bebas, which has only one weight. font-synthesis: none
        stops that fake bold on the Latin letters and digits inside these same
        headings, and [style*] catches headings styled inline (both from Cinemail). */
-    :is(html:lang(ka), html:lang(he), html:lang(ja)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-weight: 700; font-synthesis: none; }
+    :is(html:lang(ka), html:lang(he), html:lang(ar), html:lang(ja)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-weight: 700; font-synthesis: none; }
     html:lang(ka) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { font-stretch: 62.5%; }
     /* Cyrillic in display type is uppercase, like the Latin beside it: Bebas Neue
        has no lowercase, its Cyrillic partner does, so a Russian label otherwise
@@ -1870,6 +1870,11 @@ button {
        Georgian must not turn into Mtavruli. Dafa, 3 Nov 2026 (option C in _Tastebook/
        tokens.json, same in Cinemail); the matching size-adjust is in fonts/partners/partners.css. */
     :is(html:lang(ru), html:lang(uk)) :is(#boot span, .auth-logo, .auth-card h2, .check-email-title, .topbar-logo, .section-title, .card-title, .track-num, .btn-modal-primary, .btn-modal-secondary, .heard-again, .empty-state-title, .modal-title, .public-header-logo, .public-playlist-name, [style*="--font-display"]) { text-transform: uppercase; }
+    /* Arabic is joined script, and tracking pulls the letters of a word apart, so
+       nothing tracks under :lang(ar), inline styles included (hence !important).
+       The TUNEMAIL wordmarks stay Latin in every language and keep their tracking,
+       which their text-indent gives back (_Tastebook, 6 Nov 2026). */
+    :lang(ar):not(#boot span, #boot span *, .auth-logo, .auth-logo *, .topbar-logo, .topbar-logo *, .public-header-logo, .public-header-logo *) { letter-spacing: 0 !important; }
 
 </style>
 </head>
@@ -3179,7 +3184,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v95';
+const APP_BUILD = 'v96';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
