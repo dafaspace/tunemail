@@ -2365,12 +2365,15 @@ button {
           <label style="display:flex;align-items:center;gap:6px"><span style="display:inline-flex;align-items:center;vertical-align:middle;margin-right:4px"><svg width="13" height="13" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="#FF5500"/><path d="M1.5 13.5c0 1.4 1.1 2.5 2.5 2.5h14c1.4 0 2.5-1.1 2.5-2.5 0-1.2-.8-2.2-2-2.4V11c0-2.2-1.8-4-4-4-1 0-1.9.4-2.6 1C11.5 6.7 10.6 6 9.5 6 8 6 6.9 7 6.7 8.4 5.9 8.6 5 9.5 5 10.5V11c-1.2.2-2 1.2-2 2.4h.5c0-.8.6-1.5 1.5-1.5h14c.9 0 1.5.7 1.5 1.5s-.6 1.5-1.5 1.5H4c-.9 0-1.5-.7-1.5-1.5z" fill="white"/></svg></span> SoundCloud URL</label>
           <input type="url" id="playlist-soundcloud-url" placeholder="https://soundcloud.com/..." />
         </div>
-      </div>
-      <!-- Destructive actions belong at the foot of the sheet that edits the
-           thing, which is where iOS, Spotify and Apple Music all put them, and
-           separated from the controls people use every day. -->
-      <div id="edit-danger" class="edit-danger" style="display:none">
-        <button class="btn btn-ghost" id="btn-delete-from-edit">Delete this playlist</button>
+        <!-- Destructive actions belong at the foot of the sheet that edits the
+             thing, which is where iOS, Spotify and Apple Music all put them, and
+             separated from the controls people use every day. Inside the body,
+             not between it and the footer: out there it had no side padding and
+             no gap, so it ran the full width of the sheet and sat on Cancel and
+             Save (Dafa, 7 Nov 2026). -->
+        <div id="edit-danger" class="edit-danger" style="display:none">
+          <button class="btn btn-ghost" id="btn-delete-from-edit">Delete this playlist</button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" data-close="overlay-playlist">Cancel</button>
@@ -3184,7 +3187,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v96';
+const APP_BUILD = 'v97';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -4582,6 +4585,11 @@ document.getElementById('btn-save-playlist').addEventListener('click', async () 
         document.getElementById('search-playlist-select').value = created.id;
         const btn = document.getElementById('btn-add-track');
         btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = '';
+      } else if (created) {
+        // The create sheet has no tracks, so it used to close onto the list and
+        // leave the next step to be found in another tab. Open the new playlist,
+        // where + Add Track is pinned (Dafa, 7 Nov 2026).
+        openPlaylistDetail(created.id);
       }
       searchTabNewPlaylist = false;
       // Not a bare return any more: the cleanup below is now in a finally, so
@@ -4708,14 +4716,18 @@ const safeSlug = (v) => (/^[a-z0-9]{6,16}$/.test(String(v ?? '')) ? String(v) : 
 // One delegated listener rather than one per render site: the cards are rebuilt
 // by innerHTML in three different places, and a listener attached after each
 // assignment is a listener somebody forgets when they add the fourth.
+// Copy listens in the capture phase: on My Playlists the button sits inside
+// .card-actions, whose inline stopPropagation (there so Edit and Delete do not
+// also open the playlist) ended the bubble before it reached document, so the
+// button did nothing at all (Dafa, 7 Nov 2026).
 document.addEventListener('click', (e) => {
   const copy = e.target.closest?.('[data-copy-slug]');
-  if (copy) {
-    e.stopPropagation();
-    const slug = safeSlug(copy.dataset.copySlug);
-    if (slug) copyPublicLink(slug);
-    return;
-  }
+  if (!copy) return;
+  e.stopPropagation();
+  const slug = safeSlug(copy.dataset.copySlug);
+  if (slug) copyPublicLink(slug);
+}, true);
+document.addEventListener('click', (e) => {
   const card = e.target.closest?.('[data-slug]');
   if (card) {
     const slug = safeSlug(card.dataset.slug);
