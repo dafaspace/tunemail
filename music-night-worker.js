@@ -441,6 +441,62 @@ async function resolveIsrc(isrc, env, ctx) {
 }
 
 
+// ── GET /apple-search?term=... - songs by name, from Apple Music's catalogue ──
+// The page's own search is the iTunes Store, which is not the catalogue: there
+// "Radiohead Creep" returns the acoustic EP and covers, and Pablo Honey's Creep
+// is not among the first 200 results in any storefront tried (us, gb, de, ge;
+// 8 Nov 2026), while Apple Music has it, ISRC included. With the ISRC in the
+// answer, the recording a person picks needs no guessing by duration.
+// Shaped like an iTunes result, so the page reads both the same way.
+async function appleSearch(term, env, ctx) {
+  const j = (data, status = 200) => new Response(JSON.stringify(data), {
+    status,
+    headers: { ...cors(), "Content-Type": "application/json", "Cache-Control": "public, max-age=86400" },
+  });
+
+  term = String(term || "").slice(0, 200).trim();
+  if (!term) return j({ error: "term required" }, 400);
+  if (!env.APPLE_DEV_TOKEN) return j({ error: "not configured" }, 503);
+
+  const cacheKey = new Request(`https://cache.tunemail/asearch/${encodeURIComponent(term.toLowerCase())}`);
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  let res;
+  try {
+    res = await fetch(
+      `https://api.music.apple.com/v1/catalog/us/search?types=songs&limit=25&term=${encodeURIComponent(term)}`,
+      { headers: { Authorization: `Bearer ${env.APPLE_DEV_TOKEN}` } }
+    );
+  } catch (e) {
+    return j({ error: "unreachable" }, 502);
+  }
+  if (!res.ok) return j({ error: res.status === 401 ? "token expired" : `apple ${res.status}` }, 502);
+
+  const body = await res.json().catch(() => null);
+  const results = (body?.results?.songs?.data || []).map(s => {
+    const a = s.attributes || {};
+    return {
+      wrapperType: "track",
+      trackId: s.id,
+      artistName: a.artistName || null,
+      trackName: a.name || null,
+      collectionName: a.albumName || null,
+      releaseDate: a.releaseDate || null,
+      trackTimeMillis: a.durationInMillis || null,
+      artworkUrl100: a.artwork?.url ? a.artwork.url.replace("{w}", "100").replace("{h}", "100") : null,
+      trackViewUrl: a.url || null,
+      previewUrl: a.previews?.[0]?.url || null,
+      isrc: a.isrc || null,
+    };
+  });
+  const out = j({ results });
+  if (ctx) ctx.waitUntil(cache.put(cacheKey, out.clone()));
+  return out;
+}
+
+
 // ── Bandcamp, by name, accepted only from the artist's own page ─────────────
 //
 // GET /bandcamp?artist=...&title=...
@@ -821,8 +877,9 @@ async function isrcFind(params, ctx) {
   const ms = parseInt(params.get("ms") || "0", 10) || 0;
   if (!artist || !title) return deezerJson({ error: "artist and title required" }, 400);
 
+  // find2: answers cached before the variant rule below may name a live take.
   const cacheKey = new Request(
-    `https://cache.tunemail/find/${encodeURIComponent(artist)}/${encodeURIComponent(title)}/${ms}`
+    `https://cache.tunemail/find2/${encodeURIComponent(artist)}/${encodeURIComponent(title)}/${ms}`
   );
   const cache = caches.default;
   const hit = await cache.match(cacheKey);
@@ -840,11 +897,23 @@ async function isrcFind(params, ctx) {
     .replace(/\s*[\(\[].*?[\)\]]\s*/g, " ")
     .replace(/[^a-z0-9' ]/g, " ").replace(/\s+/g, " ").trim();
 
+  // norm drops whatever is in brackets, so "Lords of the Boards (Live)" compared
+  // equal to the studio title and then won on duration: on 7 Nov 2026 a 2000
+  // Amsterdam take, 3 s off, was returned for the 1997 original, whose own
+  // track was not in the first 25 results. A live take, a remix and the like
+  // are candidates only when the title asked for one. Only the qualifier counts,
+  // the part in brackets or after " - ", so Live Forever is still a title.
+  const VARIANT = /\b(live|remix|mix|acoustic|instrumental|karaoke|demo|edit|version|cover|tribute|unplugged|rehearsal)\b/i;
+  const qualifier = (s) => [...String(s || "").matchAll(/[\(\[]([^\)\]]*)[\)\]]/g)].map(m => m[1])
+    .concat(String(s || "").split(/\s+-\s+/).slice(1)).join(" ");
+  const wantsVariant = VARIANT.test(qualifier(title));
+
   let best = null, bestDrift = Infinity, throttled = null;
   for (const q of [`artist:"${lead}" track:"${short}"`, `${lead} ${short}`]) {
     const s = await deezerGet(`search?q=${encodeURIComponent(q)}&limit=25`);
     if (s?.__status) { throttled = s.__status; continue; }
     for (const c of (s?.data || [])) {
+      if (!wantsVariant && VARIANT.test(`${qualifier(c.title)} ${c.title_version || ""}`)) continue;
       const ct = norm(c.title), want = norm(short);
       if (ct !== want && !ct.startsWith(want)) continue;
       const ca = norm(c.artist?.name), wa = norm(lead);
@@ -1511,13 +1580,17 @@ async function route(request, env, ctx) {
       request.method === "GET" &&
       (url.pathname === "/resolve" || url.pathname === "/deezer" ||
        url.pathname === "/spotify" || url.pathname === "/tidal" ||
-       url.pathname === "/bandcamp" || url.pathname === "/link")
+       url.pathname === "/bandcamp" || url.pathname === "/link" ||
+       url.pathname === "/apple-search")
     ) {
       if (await overLimit(env, `lookup:${clientIp(request)}`, LOOKUP_PER_MINUTE, 60)) {
         return json({ error: "Too many lookups" }, 429, cors());
       }
       if (url.pathname === "/resolve") {
         return resolveIsrc(url.searchParams.get("isrc") || "", env, ctx);
+      }
+      if (url.pathname === "/apple-search") {
+        return appleSearch(url.searchParams.get("term"), env, ctx);
       }
       if (url.pathname === "/spotify") {
         return lookupByIsrc("spotify", url.searchParams.get("isrc") || "", env, ctx, url.searchParams.get("key"));

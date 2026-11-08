@@ -835,6 +835,34 @@ button {
       margin: 20px 0 0; padding-top: 16px;
       border-top: 1px solid var(--border);
     }
+    /* The recording a typed name stands for, chosen from Apple's catalogue. The
+       rows are buttons holding two lines, so the base rule's single-line
+       centring and cap trim are undone here. */
+    .search-match { margin: 4px 0 4px; }
+    .match-head { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted-strong); }
+    .match-row {
+      display: flex; align-items: center; justify-content: flex-start; gap: 12px;
+      width: 100%; min-height: 56px; padding: 8px; margin: 0 0 6px;
+      background: rgba(255,255,255,0.04); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      text-align: start; line-height: 1.3; text-box: normal; cursor: pointer;
+    }
+    .match-row.on { background: var(--primary-soft); border-color: var(--primary); }
+    .match-art {
+      width: 44px; height: 44px; flex-shrink: 0; border-radius: 6px; overflow: hidden;
+      background: var(--primary-soft);
+    }
+    .match-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .match-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .match-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .match-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .edit-tracks-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin: 0 0 18px; padding: 0 0 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
     .danger-note {
       margin: 0 0 12px; font-size: 12.5px; line-height: 1.55;
       color: var(--muted-strong);
@@ -2230,6 +2258,7 @@ button {
 
       <!-- Platform preview -->
       <div id="search-preview" style="display:none;padding-bottom:80px">
+        <div id="search-match" class="search-match" hidden></div>
         <div class="divider"></div>
         <div class="section-header">
           <span class="section-title">Open In</span>
@@ -2329,6 +2358,13 @@ button {
         <button class="modal-close" aria-label="Close, without saving the playlist" data-close="overlay-playlist"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="modal-body">
+        <!-- Edit only. This sheet holds the name, the description and the links,
+             and the tracks live in the playlist itself; opening Edit, people
+             looked for the tracks here (Dafa, 7 Nov 2026). -->
+        <div id="edit-tracks-row" class="edit-tracks-row" style="display:none">
+          <span id="edit-tracks-count"></span>
+          <button class="btn btn-secondary btn-sm" id="btn-edit-open-list">Open list</button>
+        </div>
         <div class="form-group">
           <label>Playlist Name</label>
           <input type="text" id="playlist-name-input" placeholder="My Awesome Playlist" />
@@ -3187,7 +3223,7 @@ document.getElementById('btn-avatar').addEventListener('click', () => {
 // Bumped with sw.js. It was the literal '1.0.0' on every feedback report ever
 // sent, so no report has ever said which build produced it - which is exactly
 // the question you ask first when someone says a thing is broken.
-const APP_BUILD = 'v97';
+const APP_BUILD = 'v98';
 console.log(`[tunemail] build ${APP_BUILD}`);
 
 // The page and the worker are deployed together but delivered separately, and
@@ -3539,6 +3575,7 @@ document.getElementById('btn-new-playlist').addEventListener('click', () => {
   if (!requireAccount('create a playlist')) return;
   document.getElementById('modal-playlist-title').textContent = 'New Playlist';
   document.getElementById('edit-danger').style.display = 'none';
+  document.getElementById('edit-tracks-row').style.display = 'none';
   document.getElementById('playlist-name-input').value = '';
   document.getElementById('playlist-desc-input').value = '';
   document.getElementById('playlist-public-toggle').checked = false;
@@ -3635,7 +3672,7 @@ async function trackLinksCacheGet(artist, trackName) {
   try {
     const { data } = await sbClient
       .from('track_links')
-      .select('direct_urls, audd_result')
+      .select('direct_urls, audd_result, isrc')
       .eq('artist', normKey(artist))
       .eq('track_name', normKey(trackName))
       .maybeSingle();
@@ -4192,6 +4229,7 @@ async function shareSingleTrack(btnId, artist, track, genre, extra = {}) {
       playlist_id: pl.id, artist, track_name: track, genre: genre || null, position: 0,
       isrc: extra.isrc || null,
       direct_urls: extra.direct_urls && Object.keys(extra.direct_urls).length ? extra.direct_urls : null,
+      ...(extra.meta || {}),
     });
     if (trErr) throw trErr;
 
@@ -4203,19 +4241,24 @@ async function shareSingleTrack(btnId, artist, track, genre, extra = {}) {
   setLoading(btnId, false);
 }
 
-document.getElementById('btn-share-track').addEventListener('click', () => shareSingleTrack(
-  'btn-share-track',
-  document.getElementById('search-artist').value.trim(),
-  document.getElementById('search-track').value.trim(),
-  getGenreValue(),
-  { isrc: pendingIsrc, direct_urls: pendingDirectUrls ? { ...pendingDirectUrls } : null },
-));
+document.getElementById('btn-share-track').addEventListener('click', () => {
+  const match = activeMatch();
+  shareSingleTrack(
+    'btn-share-track',
+    match ? match.artistName : document.getElementById('search-artist').value.trim(),
+    match ? match.trackName : document.getElementById('search-track').value.trim(),
+    getGenreValue(),
+    { isrc: pendingIsrc, direct_urls: pendingDirectUrls ? { ...pendingDirectUrls } : null, meta: matchMeta(match) },
+  );
+});
 
 // ── Tracks: add to playlist ───────────────────────────────────────────
 document.getElementById('btn-add-track').addEventListener('click', async () => {
   if (!requireAccount('add a track')) return;
-  const artist    = document.getElementById('search-artist').value.trim();
-  const track     = document.getElementById('search-track').value.trim();
+  // The recording on screen, under Apple's spelling, when one is chosen.
+  const match     = activeMatch();
+  const artist    = match ? match.artistName : document.getElementById('search-artist').value.trim();
+  const track     = match ? match.trackName : document.getElementById('search-track').value.trim();
   const genre     = getGenreValue();
   const playlistId = document.getElementById('search-playlist-select').value;
 
@@ -4243,7 +4286,8 @@ document.getElementById('btn-add-track').addEventListener('click', async () => {
       genre: genre || null,
       position: nextPos,
       isrc: pendingIsrc || null,
-      direct_urls: pendingDirectUrls || null,
+      direct_urls: pendingDirectUrls && Object.keys(pendingDirectUrls).length ? pendingDirectUrls : null,
+      ...matchMeta(match),
     });
     pendingDirectUrls = null;
     pendingIsrc = null;
@@ -4371,7 +4415,7 @@ function renderPlaylists() {
         <div class="card-actions" onclick="event.stopPropagation()">
           ${p.is_public && p.public_slug ? `
           <button class="btn btn-icon btn-ghost" data-copy-slug="${escHtml(safeSlug(p.public_slug) || '')}" title="Copy link" aria-label="Copy the public link to this playlist"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>` : ''}
-          <button class="btn btn-icon btn-ghost" onclick="openEditPlaylist('${p.id}')" title="Edit" aria-label="Edit this playlist"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="btn btn-icon btn-ghost" onclick="openEditPlaylist('${p.id}')" title="Edit details" aria-label="Edit the name, description and links of this playlist"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="btn btn-icon btn-ghost" style="color:#f87171" onclick="deletePlaylist('${p.id}')" title="Delete" aria-label="Delete this playlist"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
         </div>
       </div>
@@ -4495,8 +4539,13 @@ document.querySelectorAll('.sort-pill').forEach(btn => {
 // ── Playlists: update select in search tab ────────────────────────────
 function updatePlaylistSelect() {
   const sel = document.getElementById('search-playlist-select');
+  // Rebuilt on every render of the list, so the choice already made is put
+  // back rather than silently dropped under an enabled Add button.
+  const chosen = sel.value;
   sel.innerHTML = '<option value="">Select a playlist</option>' +
     playlists.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  if (chosen && playlists.some(p => p.id === chosen)) sel.value = chosen;
+  else if (chosen) sel.dispatchEvent(new Event('change'));
 }
 
 // ── Playlists: load from Supabase ─────────────────────────────────────
@@ -4537,6 +4586,8 @@ if (_delFromEdit) _delFromEdit.addEventListener('click', () => {
 });
 
 document.getElementById('btn-save-playlist').addEventListener('click', async () => {
+  const thenOpenList = openListAfterSave;
+  openListAfterSave = false;
   const name = document.getElementById('playlist-name-input').value.trim();
   if (!name) { showToast('Please enter a playlist name'); return; }
   const desc = document.getElementById('playlist-desc-input').value.trim();
@@ -4596,8 +4647,10 @@ document.getElementById('btn-save-playlist').addEventListener('click', async () 
       // this no longer walks past it and leaves Save disabled for the session.
       return;
     }
+    const savedId = currentPlaylist.id;
     closeModal('overlay-playlist');
     await loadPlaylists();
+    if (thenOpenList) openPlaylistDetail(savedId);
   } catch (err) {
     showToast('Error: ' + err.message);
     console.warn(err);
@@ -4613,8 +4666,12 @@ function openEditPlaylist(id) {
   const p = playlists.find(x => x.id === id);
   if (!p) return;
   currentPlaylist = p;
-  document.getElementById('modal-playlist-title').textContent = 'Edit Playlist';
+  document.getElementById('modal-playlist-title').textContent = 'Edit Details';
   document.getElementById('edit-danger').style.display = '';
+  const n = p._trackCount || 0;
+  document.getElementById('edit-tracks-count').textContent = `${n} track${n !== 1 ? 's' : ''}`;
+  document.getElementById('btn-edit-open-list').textContent = 'Open list';
+  document.getElementById('edit-tracks-row').style.display = '';
   document.getElementById('playlist-name-input').value = p.name;
   document.getElementById('playlist-desc-input').value = p.description || '';
   document.getElementById('playlist-public-toggle').checked = p.is_public;
@@ -4622,8 +4679,41 @@ function openEditPlaylist(id) {
   document.getElementById('playlist-apple-url').value = p.apple_music_url || '';
   document.getElementById('playlist-deezer-url').value = p.deezer_url || '';
   document.getElementById('playlist-soundcloud-url').value = p.soundcloud_url || '';
+  editFormBaseline = editFormSnapshot();
   openModal('overlay-playlist');
 }
+
+// Open list leaves the sheet, so whatever was typed into it would be lost
+// without a word. Once anything differs from what was loaded, the button says
+// it saves first, and does.
+const EDIT_FIELDS = ['playlist-name-input', 'playlist-desc-input', 'playlist-public-toggle',
+  'playlist-spotify-url', 'playlist-apple-url', 'playlist-deezer-url', 'playlist-soundcloud-url'];
+let editFormBaseline = '';
+let openListAfterSave = false;
+function editFormSnapshot() {
+  return JSON.stringify(EDIT_FIELDS.map(id => {
+    const el = document.getElementById(id);
+    return el.type === 'checkbox' ? el.checked : el.value.trim();
+  }));
+}
+const editFormDirty = () => !!currentPlaylist && editFormSnapshot() !== editFormBaseline;
+for (const id of EDIT_FIELDS) {
+  document.getElementById(id).addEventListener(id === 'playlist-public-toggle' ? 'change' : 'input', () => {
+    if (!currentPlaylist) return;
+    document.getElementById('btn-edit-open-list').textContent = editFormDirty() ? 'Save and open list' : 'Open list';
+  });
+}
+document.getElementById('btn-edit-open-list').addEventListener('click', () => {
+  if (!currentPlaylist) return;
+  if (editFormDirty()) {
+    openListAfterSave = true;
+    document.getElementById('btn-save-playlist').click();
+    return;
+  }
+  const id = currentPlaylist.id;
+  closeModal('overlay-playlist');
+  openPlaylistDetail(id);
+});
 
 // ── Playlists: delete ─────────────────────────────────────────────────
 function deletePlaylist(id) {
@@ -4675,9 +4765,11 @@ document.getElementById('btn-add-track-to-playlist').addEventListener('click', (
   if (!currentPlaylist) return;
   closeModal('overlay-playlist-detail');
   showTab('search');
-  // Pre-select this playlist in the search tab dropdown
+  // Pre-select this playlist in the search tab dropdown. The change event is
+  // what enables + Add to Playlist; setting the value alone left the playlist
+  // chosen and the button grey (found 7 Nov 2026).
   const sel = document.getElementById('search-playlist-select');
-  if (sel) sel.value = currentPlaylist.id;
+  if (sel) { sel.value = currentPlaylist.id; sel.dispatchEvent(new Event('change')); }
   // Focus artist input
   setTimeout(() => document.getElementById('search-artist')?.focus(), 100);
 });
@@ -5272,6 +5364,7 @@ document.getElementById('btn-new-playlist-inline').addEventListener('click', () 
   searchTabNewPlaylist = true;
   document.getElementById('modal-playlist-title').textContent = 'New Playlist';
   document.getElementById('edit-danger').style.display = 'none';
+  document.getElementById('edit-tracks-row').style.display = 'none';
   document.getElementById('playlist-name-input').value = '';
   document.getElementById('playlist-desc-input').value = '';
   document.getElementById('playlist-public-toggle').checked = false;
@@ -5279,6 +5372,10 @@ document.getElementById('btn-new-playlist-inline').addEventListener('click', () 
   document.getElementById('playlist-apple-url').value = '';
   document.getElementById('playlist-deezer-url').value = '';
   document.getElementById('playlist-soundcloud-url').value = '';
+  // Without this, Save took the update branch for whichever playlist was open
+  // last - reached by + Add Track, which lands right here - and renamed it
+  // instead of creating a new one (found 7 Nov 2026).
+  currentPlaylist = null;
   openModal('overlay-playlist');
 });
 
@@ -6055,9 +6152,212 @@ function updateSearchPreview() {
     document.getElementById('btn-expand-platforms').textContent = '+ More platforms';
     renderPlatformLinks(artist, track, 'search-platform-links', false);
   }
+  scheduleMatch(artist, track);
 }
 document.getElementById('search-artist').addEventListener('input', updateSearchPreview);
 document.getElementById('search-track').addEventListener('input', updateSearchPreview);
+
+// ── Search: which recording ──────────────────────────────────────────
+//
+// A typed name used to be saved as text, and text gets search links and no
+// cover. Found 7 Nov 2026: "Guano Apes - Lord of the Boards", one letter short
+// of the real title and spelled that way in two MusicBrainz entries the
+// autocomplete offers, went in with no ISRC, four search links and no sleeve,
+// while "Lords of the Boards" already had all four exact links in the cache.
+//
+// The strict name match in lookupItunes is right for lookups nobody watches.
+// Here somebody is watching, so the catalogue's candidates are shown and the
+// person decides. An exact name is chosen for them; a looser one waits for a
+// tap. The chosen recording is what gets saved, under Apple's spelling.
+let pendingMatch = null;   // the iTunes result the form will save
+let matchList = [];
+let matchSeq = 0;
+let matchTimer = null;
+
+// Belongs to the links it produced: a paste, a recognition or a keystroke
+// replaces pendingDirectUrls, and the match stops counting without any of
+// those paths having to know it exists.
+const activeMatch = () => (pendingMatch && pendingMatch.links === pendingDirectUrls ? pendingMatch : null);
+
+function matchMeta(m) {
+  if (!m) return {};
+  return {
+    album: m.collectionName || null,
+    duration_ms: m.trackTimeMillis || null,
+    release_date: m.releaseDate ? m.releaseDate.slice(0, 10) : null,
+  };
+}
+
+function hideMatch() {
+  const el = document.getElementById('search-match');
+  el.hidden = true;
+  el.innerHTML = '';
+  matchList = [];
+}
+
+function scheduleMatch(artist, track) {
+  clearTimeout(matchTimer);
+  const seq = ++matchSeq;
+  if (activeMatch()) return;
+  hideMatch();
+  // A pasted or recognised song is already the exact recording.
+  if (pendingDirectUrls || !artist || track.length < 2) return;
+  matchTimer = setTimeout(async () => {
+    const el = document.getElementById('search-match');
+    el.hidden = false;
+    el.innerHTML = '<p class="match-head">Finding the recording…</p>';
+    const found = await findRecordings(artist, track);
+    if (seq !== matchSeq) return;
+    if (lookupFailed(found)) {
+      el.innerHTML = '<p class="match-head">Could not reach Apple Music to check this song, so the links below are searches.</p>';
+      return;
+    }
+    matchList = found;
+    if (!found.length) {
+      el.innerHTML = '<p class="match-head">Not found in Apple Music, so the links below are searches, not the song itself.</p>';
+      return;
+    }
+    if (scoreCandidate(found[0], artist, track) >= 10) chooseMatch(found[0], false);
+    else paintMatch();
+  }, 600);
+}
+
+// Apple Music's catalogue through the worker first: the iTunes Store search
+// below misses whole albums (Pablo Honey's Creep is not in its first 200
+// results), and the catalogue answers with the ISRC. The Store search stays as
+// the fallback for when the worker cannot answer.
+async function catalogueSongs(term) {
+  try {
+    const r = await fetch(`${MUSIC_NIGHT_WORKER}/apple-search?term=${encodeURIComponent(term)}`);
+    if (r.ok) {
+      const d = await r.json().catch(() => null);
+      if (Array.isArray(d?.results)) return d.results;
+    }
+  } catch (e) { /* fall through to the Store */ }
+  try {
+    const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=25`);
+    if (!r.ok) return LOOKUP_FAILED;
+    return (await r.json().catch(() => ({}))).results || [];
+  } catch (e) { return LOOKUP_FAILED; }
+}
+
+async function findRecordings(artist, track) {
+  const results = await catalogueSongs(`${artist} ${track}`.trim());
+  if (lookupFailed(results)) return LOOKUP_FAILED;
+  const songs = results.filter(c => c.wrapperType === 'track' && c.trackName && c.artistName && c.trackViewUrl);
+  const a = normLoose(artist);
+  const byArtist = songs.filter(c => {
+    const ca = normLoose(c.artistName);
+    return ca === a || ca.includes(a) || a.includes(ca);
+  });
+  // A misspelt artist still gets the catalogue's own order to choose from.
+  const byName = byArtist.length ? byArtist : songs;
+  // And the artist's other songs are not candidates: half the typed title's
+  // words must be there. "Lord of the Boards" keeps Lords of the Boards (3 of
+  // 4) and drops 360° Aliendrop, which the search returned beside it.
+  const typed = normLoose(track).split(' ').filter(w => w.length > 1);
+  const near = byName.filter(c => {
+    const words = new Set(normLoose(c.trackName).split(' '));
+    return typed.filter(w => words.has(w)).length * 2 >= typed.length;
+  });
+  const pool = near.length ? near : byName;
+  // One row per title, its earliest release: the same recording is on the
+  // album, a best-of and three compilations, and three identical rows would
+  // crowd out the live take or the remix the person may actually mean.
+  // Apple dates a best-of track by its first release, so on a tie the album
+  // that does not read as a compilation wins (Proud Like a God over Planet of
+  // the Apes - Best of, both 6 Oct 1997).
+  const compilation = (c) => /\b(best|greatest|hits|collection|anthology|essential|gold)\b/i.test(c.collectionName || '');
+  const earlier = (c, p) => {
+    const a = (c.releaseDate || '').slice(0, 10), b = (p.releaseDate || '').slice(0, 10);
+    return a !== b ? a < b : compilation(p) && !compilation(c);
+  };
+  const firstByTitle = new Map();
+  pool.forEach((c, i) => {
+    const k = normLoose(c.trackName);
+    const prev = firstByTitle.get(k);
+    if (!prev) firstByTitle.set(k, { c, i });
+    else if (earlier(c, prev.c)) firstByTitle.set(k, { c, i: prev.i });
+  });
+  const exact = (c) => (scoreCandidate(c, artist, track) >= 10 ? 1 : 0);
+  return [...firstByTitle.values()]
+    .sort((x, y) => exact(y.c) - exact(x.c) || x.i - y.i)
+    .slice(0, 3)
+    .map(r => r.c);
+}
+
+function paintMatch() {
+  const el = document.getElementById('search-match');
+  const m = activeMatch();
+  const head = m
+    ? (matchList.length > 1 ? 'The recording these links open. Not this one? Tap another.' : 'The recording these links open.')
+    : 'Which recording do you mean? Until you tap one, the links below are searches.';
+  el.hidden = false;
+  el.innerHTML = `<p class="match-head">${head}</p>` + matchList.map((c, i) => {
+    const on = !!m && m.trackId === c.trackId;
+    const sub = [c.artistName, c.collectionName, (c.releaseDate || '').slice(0, 4), fmtDuration(c.trackTimeMillis)]
+      .filter(Boolean).map(escHtml).join(' · ');
+    return `<button type="button" class="match-row${on ? ' on' : ''}" data-match="${i}" aria-pressed="${on}">
+        <span class="match-art">${c.artworkUrl100 ? `<img src="${escHtml(c.artworkUrl100)}" alt="" loading="lazy">` : ''}</span>
+        <span class="match-text"><span class="match-title">${escHtml(c.trackName)}</span><span class="match-sub">${sub}</span></span>
+      </button>`;
+  }).join('');
+}
+
+// A tap also puts Apple's spelling into the fields, so the person sees the
+// correction; a match chosen for them leaves what they typed alone.
+function chooseMatch(c, byTap) {
+  const seq = ++pasteSeq;
+  if (byTap) {
+    document.getElementById('search-artist').value = c.artistName;
+    document.getElementById('search-track').value = c.trackName;
+  }
+  const links = {};
+  try {
+    const v = new URL(c.trackViewUrl);
+    v.searchParams.delete('uo');
+    if (URL_SHAPE.appleMusic.test(v.href)) links.appleMusic = v.href;
+  } catch (e) { /* no Apple link, the others are still looked up */ }
+  pendingDirectUrls = links;
+  pendingIsrc = c.isrc || null;   // the catalogue names it; the Store does not
+  pendingMatch = { ...c, links };
+  paintMatch();
+  renderPlatformLinks(c.artistName, c.trackName, 'search-platform-links', platformsExpanded);
+  // The sleeve is cached now, under the name that will be saved, so the
+  // playlist shows it the moment the track lands there.
+  if (currentUser && c.artworkUrl100) {
+    trackLinksCacheSet(c.artistName, c.trackName, {
+      artwork_url: bigArt(c.artworkUrl100), preview_url: c.previewUrl || null, enrich_missed_at: null,
+    });
+  }
+  // What the shared cache already knows about this name comes first: the
+  // duration search is a guess with a tolerance, and on 7 Nov it took the 2000
+  // Amsterdam live take for the studio Lords of the Boards, whose ISRC and four
+  // exact links were sitting in the cache. The Apple link stays the one tapped.
+  // Then, with Apple's duration, the ISRC search fills what is still missing.
+  (async () => {
+    const hit = await trackLinksCacheGet(c.artistName, c.trackName);
+    if (seq !== pasteSeq || pendingDirectUrls !== links) return;
+    // The cache is keyed by name, so its links are only borrowed when it agrees
+    // on the recording, or when the catalogue gave no code to disagree with.
+    const isrc = c.isrc || hit?.isrc || null;
+    if (!c.isrc || !hit?.isrc || hit.isrc === c.isrc) {
+      for (const [k, v] of Object.entries(hit?.direct_urls || {})) if (v && !links[k]) links[k] = v;
+    }
+    if (isrc) pendingIsrc = isrc;
+    renderPlatformLinks(c.artistName, c.trackName, 'search-platform-links', platformsExpanded);
+    await fillExactLinks(seq, {
+      artist: c.artistName, title: c.trackName,
+      isrc, durationMs: c.trackTimeMillis || null,
+    }, links);
+  })().catch(e => console.warn('match links:', e.message));
+}
+
+document.getElementById('search-match').addEventListener('click', e => {
+  const b = e.target.closest('[data-match]');
+  const c = b && matchList[+b.dataset.match];
+  if (c) chooseMatch(c, true);
+});
 
 // ── MusicBrainz Autocomplete ──────────────────────────────────────────
 let acArtistTimer = null, acTrackTimer = null;
